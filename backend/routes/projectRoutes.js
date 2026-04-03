@@ -363,15 +363,20 @@ router.post("/:id/sync-request", auth, async (req, res) => {
     const original = await Project.findById(req.params.id);
     if (!original) return res.status(404).json({ message: "Project not found" });
 
-    const originalOwnerId = original.userId?.toString();
-    if (originalOwnerId === req.user.id)
-      return res.status(400).json({ message: "Cannot sync to your own project" });
+    const originalOwnerId = (original.rootCreatorId || original.userId)?.toString();
+    const isProjectOwner = originalOwnerId === req.user.id;
+    const isAllowedRemixer = original.allowedRemixers?.some(uId => uId.toString() === req.user.id);
 
-    // Ensure only allowed remixers can push (security check in case access was revoked)
-    const isOwner = (original.owner?.toString() || original.userId.toString()) === req.user.id;
-    const isAllowed = isOwner || original.allowedRemixers?.some(uId => uId.toString() === req.user.id);
-    if (!isAllowed) {
-      return res.status(403).json({ message: "Your access to this project has been revoked by the creator." });
+    // Check if user has a remix of this project (remix branch owners can always push)
+    const userRemix = await Project.findOne({ remixedFrom: req.params.id, userId: req.user.id });
+    const isRemixOwner = !!userRemix;
+
+    // Contributors (in allowedRemixers or who own a remix) can always push
+    if (!isAllowedRemixer && !isRemixOwner) {
+      if (isProjectOwner) {
+        return res.status(400).json({ message: "Cannot sync to your own project" });
+      }
+      return res.status(403).json({ message: "You do not have permission to sync to this project." });
     }
 
     // Check no pending request already exists from this user
@@ -381,10 +386,10 @@ router.post("/:id/sync-request", auth, async (req, res) => {
     if (alreadyPending)
       return res.status(400).json({ message: "You already have a pending sync request" });
 
-    const { summary } = req.body;
+    const { summary } = req.body || {};
 
-    // Find user's remix if it exists, otherwise use their userId as reference
-    const remix = await Project.findOne({ remixedFrom: req.params.id, userId: req.user.id });
+    // userRemix already fetched above
+    const remix = userRemix;
 
     if (!Array.isArray(original.syncRequests)) original.syncRequests = [];
     original.syncRequests.push({

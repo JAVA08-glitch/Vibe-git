@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import "./CollaborationHub.css";
 
-const CollaborationHub = ({ project, user, onPull, onPush, isOwner, isContributor, syncSending, syncRequestSent }) => {
+const CollaborationHub = ({ project, user, onPull, onPush, isOwner, isContributor, isRemixOwner, syncSending, syncRequestSent }) => {
   const [terminalOutput, setTerminalOutput] = useState([
     "✔ Connected to upstream",
     "Ready for secure collaboration operations."
@@ -10,7 +10,12 @@ const CollaborationHub = ({ project, user, onPull, onPush, isOwner, isContributo
   const [pendingAction, setPendingAction] = useState(null);
   
   const isRemix = !!project.remixedFrom;
-  const targetProjectId = project.userRemixId || project._id;
+  // For push: if this is a remix page, push to the original; if on original page, push to current project
+  const originalProjectId = isRemix
+    ? (project.remixedFrom?._id || project.remixedFrom)
+    : project._id;
+  // For pull: always pull into current project
+  const pullTargetId = project._id;
 
   const addOutput = (line) => {
     setTerminalOutput((prev) => [...prev.slice(-4), `> ${line}`]);
@@ -31,7 +36,7 @@ const CollaborationHub = ({ project, user, onPull, onPush, isOwner, isContributo
     if (type === "pull") {
       addOutput("Syncing updates from upstream...");
       try {
-        await onPull(targetProjectId);
+        await onPull(pullTargetId);
         addOutput("✔ Updates synced successfully");
       } catch (err) {
         addOutput("❌ Sync failed — retry");
@@ -39,8 +44,8 @@ const CollaborationHub = ({ project, user, onPull, onPush, isOwner, isContributo
     } else if (type === "push") {
       addOutput("Secure request initiated...");
       try {
-        // onPush logic in parent uses projectId, we should ensure it uses the remix ID
-        await onPush(targetProjectId);
+        // Always push TO the original project so admin receives the merge request
+        await onPush(originalProjectId);
         addOutput("✔ Merge Request Sent");
       } catch (err) {
         addOutput("❌ Sync failed — retry");
@@ -48,7 +53,8 @@ const CollaborationHub = ({ project, user, onPull, onPush, isOwner, isContributo
     }
   };
 
-  const canShowActionHub = (isOwner && isRemix) || (isContributor && project.userRemixId);
+  // Show for: remix branch owners on their fork page, OR approved contributors on original project
+  const canShowActionHub = isRemixOwner || isContributor;
   if (!canShowActionHub) return null;
 
   return (

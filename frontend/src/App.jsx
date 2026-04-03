@@ -17,8 +17,6 @@ import EditProject from "./pages/EditProject";
 import SyncRequests from "./pages/SyncRequests";
 import Search from "./pages/Search";
 import ProjectIDE from "./pages/ProjectIDE";
-import Dashboard from "./pages/Dashboard";
-
 function AppInner() {
   const { user } = useAuth();
   const [chatOpen, setChatOpen] = useState(false);
@@ -51,7 +49,6 @@ function AppInner() {
         <Route path="/projects/:id/ide" element={<ProjectIDE />} />
         <Route path="/projects/:id/sync-requests" element={<SyncRequests />} />
         <Route path="/search" element={<Search />} />
-        <Route path="/dashboard" element={<Dashboard />} />
       </Routes>
 
       {/* Global floating chat button */}
