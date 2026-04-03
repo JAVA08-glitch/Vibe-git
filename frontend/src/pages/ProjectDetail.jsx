@@ -101,10 +101,19 @@ export default function ProjectDetail() {
   const [projectNotifications, setProjectNotifications] = useState([]);
   const [isAdminHubLoading, setIsAdminHubLoading] = useState(false);
 
-  const isOwner = user && project && user.id === (project.owner?._id || project.owner || project.userId?._id || project.userId)?.toString();
-  const isMainAdmin = user && project && user.id === (project.rootCreatorId?._id || project.rootCreatorId || project.userId?._id || project.userId)?.toString();
+  // isOwner: you own this specific project document (could be a remix or original)
+  const isOwner = user && project && user.id === (project.userId?._id || project.userId)?.toString();
+  // isRemix: this project is a remix/branch of another
   const isRemix = !!project?.remixedFrom;
-  const isContributor = user && project && project.allowedRemixers?.some(u => (u._id || u).toString() === user?.id);
+  // isMainAdmin: you are the ROOT creator — only checked on NON-remix (original) projects
+  const isMainAdmin = user && project && !isRemix && (
+    user.id === (project.rootCreatorId?._id || project.rootCreatorId)?.toString() ||
+    (!project.rootCreatorId && user.id === (project.userId?._id || project.userId)?.toString())
+  );
+  // isRemixOwner: you own this project AND it is a remix branch (contributor working on their fork)
+  const isRemixOwner = isOwner && isRemix;
+  // isContributor: approved by the admin but doesn't own a remix yet (can request remix)
+  const isContributor = user && project && !isOwner && project.allowedRemixers?.some(u => (u._id || u).toString() === user?.id);
   const isGuest = user && project && !isOwner && !isContributor;
   const isLoggedOut = !user;
 
@@ -269,7 +278,7 @@ export default function ProjectDetail() {
     setSyncSending(true);
     const pid = targetId || (project.remixedFrom?._id || project.remixedFrom);
     try {
-      await api.post(`/projects/${pid}/sync-request`);
+      await api.post(`/projects/${pid}/sync-request`, {});
       setSyncRequestSent(true);
       showToast("Push successful! Sync request sent to the original creator.", "success", "Pushed ⬆");
     } catch (err) {
@@ -439,7 +448,8 @@ export default function ProjectDetail() {
               <span>Upvote {likes}</span>
             </button>
 
-            {isOwner && (
+            {/* Admin controls: only rootCreator sees this */}
+            {isMainAdmin && !isRemix && (
               <div className="owner-controls">
                 <button className="action-btn-outline" onClick={() => navigate(`/projects/${id}/edit`)}>✏️ Edit</button>
                 <button className="action-btn-accent" onClick={() => navigate(`/projects/${id}/ide`)}>💻 Web IDE</button>
@@ -460,39 +470,38 @@ export default function ProjectDetail() {
               </div>
             )}
 
-            {isContributor && (
+            {/* Remix branch owner: can edit their own branch and send merge request to admin */}
+            {isRemixOwner && (
               <div className="contributor-actions" style={{ display: 'flex', gap: '8px' }}>
-                <button className="action-btn-accent" onClick={() => navigate(`/projects/${project.userRemixId || id}/ide`)}>💻 Web IDE</button>
+                <button className="action-btn-outline" onClick={() => navigate(`/projects/${id}/edit`)}>✏️ Edit</button>
+                <button className="action-btn-accent" onClick={() => navigate(`/projects/${id}/ide`)}>💻 Web IDE</button>
                 <button 
                   className={`action-btn-p ${syncSending ? "loading" : ""}`} 
-                  onClick={async () => {
-                    setSyncSending(true);
-                    try {
-                      await api.post(`/projects/${project.userRemixId || id}/sync`);
-                      showToast("Updates synchronized successfully!", "success", "Sync Complete 🔄");
-                    } catch (err) {
-                      showToast(err.response?.data?.message || "Sync failed", "error", "Error");
-                    } finally {
-                      setSyncSending(false);
-                    }
-                  }}
+                  onClick={() => handlePullUpdates(id)}
                   disabled={syncSending}
                 >
-                  🔄 Sync Updates
+                  ⬇ Pull Updates
                 </button>
                 <button 
                   className="action-btn-accent"
-                  onClick={async () => {
-                    try {
-                      await api.post(`/projects/${project.userRemixId || id}/request-merge`);
-                      setSyncRequestSent(true);
-                      showToast("Merge request sent to the owner!", "success", "Request Sent 🚀");
-                    } catch (err) {
-                      showToast(err.response?.data?.message || "Failed to send merge request", "error", "Error");
-                    }
-                  }}
+                  onClick={() => handlePushToOriginal(project.remixedFrom?._id || project.remixedFrom)}
+                  disabled={syncSending || syncRequestSent}
                 >
-                  🚀 Request Merge
+                  {syncRequestSent ? "✓ Merge Sent" : "🚀 Request Merge"}
+                </button>
+              </div>
+            )}
+
+            {/* Approved contributor on original project page: can send merge request */}
+            {isContributor && (
+              <div className="contributor-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.8rem', color: '#4ade80', padding: '8px 12px', background: 'rgba(34,197,94,0.1)', borderRadius: '6px', border: '1px solid rgba(34,197,94,0.2)' }}>✅ Contributor</span>
+                <button 
+                  className={`action-btn-p ${syncSending ? "loading" : ""}`} 
+                  onClick={handleSendSyncRequest}
+                  disabled={syncSending || syncRequestSent}
+                >
+                  {syncRequestSent ? "✓ Merge Sent" : syncSending ? "Sending..." : "🚀 Request Merge"}
                 </button>
               </div>
             )}
@@ -509,14 +518,15 @@ export default function ProjectDetail() {
         </div>
 
 
-        {/* Collaboration Hub Terminal */}
+        {/* Collaboration Hub Terminal — shown for remix branch owners AND approved contributors */}
         <CollaborationHub 
           project={project}
           user={user}
           onPull={handlePullUpdates}
           onPush={handlePushToOriginal}
-          isOwner={isOwner}
+          isOwner={isOwner || isContributor}
           isContributor={isContributor}
+          isRemixOwner={isRemixOwner}
           syncSending={syncSending}
           syncRequestSent={syncRequestSent}
         />

@@ -24,16 +24,48 @@ const RemixRequestButton = ({ projectId, initialStatus }) => {
     }
   };
 
+  const handleWithdraw = async () => {
+    setLoading(true);
+    setErrorMsg("");
+    try {
+      const { withdrawRemixRequest } = await import('../api/remixApi');
+      await withdrawRemixRequest(projectId);
+      setStatus('idle');
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || 'Withdrawal failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (status === 'pending') {
     return (
-      <button 
-        className="remix-btn" 
-        disabled 
-        style={{ background: "#ffbd2e", color: "#000", border: "none", cursor: "not-allowed" }}
-        title="Request Sent Successfully"
-      >
-        ⏳ Pending Approval
-      </button>
+      <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
+        <button 
+          className="remix-btn pr-btn" 
+          onClick={handleWithdraw} 
+          disabled={loading}
+          style={{ background: "#ffbd2e", color: "#000", border: "none", cursor: "pointer" }}
+          title="Click to withdraw your remix request"
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "#ff5f56";
+            e.currentTarget.style.color = "#fff";
+            e.currentTarget.innerHTML = "✕ Withdraw Request";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "#ffbd2e";
+            e.currentTarget.style.color = "#000";
+            e.currentTarget.innerHTML = "⏳ Pending Approval";
+          }}
+        >
+          ⏳ Pending Approval
+        </button>
+        {errorMsg && (
+          <span style={{ position: "absolute", top: "100%", marginTop: "4px", fontSize: "11px", color: "#ff5f56", whiteSpace: "nowrap" }}>
+            {errorMsg}
+          </span>
+        )}
+      </div>
     );
   }
 

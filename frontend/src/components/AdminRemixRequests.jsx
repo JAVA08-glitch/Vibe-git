@@ -66,22 +66,21 @@ const AdminRemixRequests = ({ projectId }) => {
   return (
     <div style={styles.container}>
       <p style={styles.desc}>
-        When a user requests to remix your project, their request appears here. 
-        Approve to grant them a private working branch, or reject to deny access. 
-        All modifications remain secure and under your control.
+        <strong>Note: A Remix Request is only asking for permission to clone this project. No code has been changes yet.</strong><br/>
+        Approve to grant them a private working branch. Any actual code changes they make will appear later in your <strong>Admin Dashboard</strong> as a "Sync Request", where you can inspect their code before merging.
       </p>
 
       {pendingRequests.length > 0 && (
         <div style={styles.badge}>
           <span style={styles.badgeDot}></span>
-          {pendingRequests.length} pending request{pendingRequests.length > 1 ? 's' : ''}
+          {pendingRequests.length} request{pendingRequests.length > 1 ? 's' : ''} total
         </div>
       )}
 
       {pendingRequests.length === 0 ? (
         <div style={styles.empty}>
           <span style={styles.emptyIcon}>📭</span>
-          No pending remix requests
+          No remix requests
         </div>
       ) : (
         <div>
@@ -108,26 +107,29 @@ const AdminRemixRequests = ({ projectId }) => {
                   </span>
                 </div>
               </div>
-              <div style={styles.actions}>
-                <button 
-                  style={{ ...styles.approveBtn, opacity: actionLoading === req._id ? 0.5 : 1 }}
-                  onClick={() => handleRespond(req._id, 'approve')}
-                  disabled={actionLoading === req._id}
-                  onMouseDown={e => e.currentTarget.style.transform = "scale(0.95)"}
-                  onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}
-                >
-                  {actionLoading === req._id ? "..." : "Approve"}
-                </button>
-                <button 
-                  style={{ ...styles.rejectBtn, opacity: actionLoading === req._id ? 0.5 : 1 }}
-                  onClick={() => handleRespond(req._id, 'reject')}
-                  disabled={actionLoading === req._id}
-                  onMouseDown={e => e.currentTarget.style.transform = "scale(0.95)"}
-                  onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}
-                >
-                  {actionLoading === req._id ? "..." : "Reject"}
-                </button>
-              </div>
+              
+              {req.status === "pending" && (
+                <div style={styles.actions}>
+                  <button 
+                    style={{ ...styles.approveBtn, opacity: actionLoading === req._id ? 0.5 : 1 }}
+                    onClick={() => handleRespond(req._id, 'approve')}
+                    disabled={actionLoading === req._id}
+                    onMouseDown={e => e.currentTarget.style.transform = "scale(0.95)"}
+                    onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}
+                  >
+                    {actionLoading === req._id ? "..." : "Approve"}
+                  </button>
+                  <button 
+                    style={{ ...styles.rejectBtn, opacity: actionLoading === req._id ? 0.5 : 1 }}
+                    onClick={() => handleRespond(req._id, 'reject')}
+                    disabled={actionLoading === req._id}
+                    onMouseDown={e => e.currentTarget.style.transform = "scale(0.95)"}
+                    onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}
+                  >
+                    {actionLoading === req._id ? "..." : "Reject"}
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

@@ -127,9 +127,16 @@ export default function ProjectIDE() {
   if (loading) return <div className="ide-loading"><div className="spinner"></div>Loading Vibe IDE...</div>;
 
   const isOwner = user && project && user.id === (project.userId?._id || project.userId)?.toString();
+  const isRootCreator = user && project && project.rootCreatorId && user.id === (project.rootCreatorId._id || project.rootCreatorId).toString();
+  const canAccess = isOwner || isRootCreator;
   const isRemix = !!project.remixedFrom;
 
-  if (!isOwner) {
+  // Inspect mode detects if root creator is viewing
+  const urlParams = new URLSearchParams(window.location.search);
+  const isInspectMode = isRootCreator && !isOwner && urlParams.get("inspect") === "true";
+  const reqId = urlParams.get("reqId");
+
+  if (!canAccess) {
     return (
       <div className="ide-msg-container">
         <p>🔒 You must be the owner of this branch to use the IDE.</p>
@@ -138,31 +145,56 @@ export default function ProjectIDE() {
     );
   }
 
+  const handleRespondSync = async (action) => {
+    try {
+       const res = await api.post(`/projects/${project.remixedFrom._id || project.remixedFrom}/sync-request/${reqId}/respond`, { action });
+       alert(res.data.message);
+       if(action === "approve") {
+          window.location.href = `/dashboard`;
+       } else {
+          window.location.href = `/dashboard`;
+       }
+    } catch(err) {
+       alert(err.response?.data?.message || `Failed to ${action}`);
+    }
+  };
+
   return (
     <div className="ide-container">
       <div className="ide-header">
         <div className="ide-header-left">
-          <Link to={`/projects/${id}`} className="ide-back-btn">← Back</Link>
+          <Link to={isInspectMode ? "/dashboard" : `/projects/${id}`} className="ide-back-btn">← Back</Link>
           <div className="ide-title-block">
             <span className="ide-title">{project.title}</span>
             {isRemix && <span className="ide-badge">Branch</span>}
+            {isInspectMode && <span className="ide-badge inspect-mode" style={{marginLeft: "10px", background: "#f472b6"}}>Inspect Mode</span>}
           </div>
         </div>
         <div className="ide-header-right">
           <button className="ide-btn" onClick={() => window.open(`${api.defaults.baseURL}/projects/${id}/download`)} title="Download ZIP">
             📥 ZIP
           </button>
-          <button className="ide-btn save-btn" onClick={handleSave} disabled={saving}>
-            {saving ? "Saving..." : "💾 Save"}
-          </button>
-          {isRemix && (
+          
+          {isInspectMode ? (
             <>
-              <button className="ide-btn pull-btn" onClick={handlePullUpdates}>
-                ⬇ Sync Updates
+               <button className="ide-btn" style={{background: "#34d399", color: "#000"}} onClick={() => handleRespondSync('approve')}>✓ Approve Merge</button>
+               <button className="ide-btn" style={{background: "#ff5f56", color: "#fff"}} onClick={() => handleRespondSync('decline')}>✕ Decline Merge</button>
+            </>
+          ) : (
+            <>
+              <button className="ide-btn save-btn" onClick={handleSave} disabled={saving}>
+                {saving ? "Saving..." : "💾 Save"}
               </button>
-              <button className="ide-btn push-btn" onClick={handlePushToOriginal} disabled={syncSending}>
-                {syncSending ? "Syncing..." : "⬆ Request Merge"}
-              </button>
+              {isRemix && (
+                <>
+                  <button className="ide-btn pull-btn" onClick={handlePullUpdates}>
+                    ⬇ Sync Updates
+                  </button>
+                  <button className="ide-btn push-btn" onClick={handlePushToOriginal} disabled={syncSending}>
+                    {syncSending ? "Syncing..." : "⬆ Request Merge"}
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>

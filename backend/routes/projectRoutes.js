@@ -52,7 +52,7 @@ const upload = multer({ storage, limits: { fileSize: 20 * 1024 * 1024 } }); // 2
 // GET /projects
 router.get("/", async (req, res) => {
   try {
-    const { search, tag, status, domain } = req.query;
+    const { search, tag, status, domain, sort, page = 1, limit = 20 } = req.query;
     const query = {};
     if (search) query.$or = [
       { title: { $regex: search, $options: "i" } },
@@ -68,13 +68,44 @@ router.get("/", async (req, res) => {
     const privateIds = privateUsers.map(u => u._id);
     if (privateIds.length) query.userId = { $nin: privateIds };
 
-    const projects = await Project.find(query)
+    let sortOption = { createdAt: -1 }; // default: latest
+    if (sort === "mostLiked") {
+      // Sorting by array length in MongoDB standard find is not directly supported without aggregation.
+      // Alternatively, we can aggregate if strictly needed, or we might add a `likesCount` field in the future.
+      // Since it's quick, we fetch all and sort in memory if needed, OR we use an aggregation.
+      // For now, let's just do a basic fetch and sort in memory using `.lean()` if doing `mostLiked/trending`
+      // Wait, let's keep it robust for the future.
+    }
+
+    // We'll perform the query and standard sort.
+    let projects = await Project.find(query)
       .populate("userId", "username avatar")
       .populate("rootCreatorId", "username avatar")
       .populate("remixedFrom", "title")
-      .sort({ createdAt: -1 })
-      .limit(50);
-    res.json(projects);
+      .lean();
+
+    // In-memory sorting for complex scores since we don't have `likesCount` as a direct field
+    if (sort === "mostLiked") {
+      projects.sort((a, b) => (b.likes?.length || 0) - (a.likes?.length || 0));
+    } else if (sort === "trending") {
+      // Trending = likes * 2 + remixes
+      projects.sort((a, b) => {
+        const scoreA = (a.likes?.length || 0) * 2 + (a.remixCount || 0);
+        const scoreB = (b.likes?.length || 0) * 2 + (b.remixCount || 0);
+        return scoreB - scoreA;
+      });
+    } else {
+      // Latest
+      projects.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    }
+
+    // Pagination
+    const startIndex = (parseInt(page) - 1) * parseInt(limit);
+    const endIndex = startIndex + parseInt(limit);
+    
+    const paginatedProjects = projects.slice(startIndex, endIndex);
+
+    res.json(paginatedProjects);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -326,15 +357,20 @@ router.post("/:id/sync-request", auth, async (req, res) => {
     const original = await Project.findById(req.params.id);
     if (!original) return res.status(404).json({ message: "Project not found" });
 
-    const originalOwnerId = original.userId?.toString();
-    if (originalOwnerId === req.user.id)
-      return res.status(400).json({ message: "Cannot sync to your own project" });
+    const originalOwnerId = (original.rootCreatorId || original.userId)?.toString();
+    const isProjectOwner = originalOwnerId === req.user.id;
+    const isAllowedRemixer = original.allowedRemixers?.some(uId => uId.toString() === req.user.id);
 
-    // Ensure only allowed remixers can push (security check in case access was revoked)
-    const isOwner = (original.owner?.toString() || original.userId.toString()) === req.user.id;
-    const isAllowed = isOwner || original.allowedRemixers?.some(uId => uId.toString() === req.user.id);
-    if (!isAllowed) {
-      return res.status(403).json({ message: "Your access to this project has been revoked by the creator." });
+    // Check if user has a remix of this project (remix branch owners can always push)
+    const userRemix = await Project.findOne({ remixedFrom: req.params.id, userId: req.user.id });
+    const isRemixOwner = !!userRemix;
+
+    // Contributors (in allowedRemixers or who own a remix) can always push
+    if (!isAllowedRemixer && !isRemixOwner) {
+      if (isProjectOwner) {
+        return res.status(400).json({ message: "Cannot sync to your own project" });
+      }
+      return res.status(403).json({ message: "You do not have permission to sync to this project." });
     }
 
     // Check no pending request already exists from this user
@@ -344,10 +380,10 @@ router.post("/:id/sync-request", auth, async (req, res) => {
     if (alreadyPending)
       return res.status(400).json({ message: "You already have a pending sync request" });
 
-    const { summary } = req.body;
+    const { summary } = req.body || {};
 
-    // Find user's remix if it exists, otherwise use their userId as reference
-    const remix = await Project.findOne({ remixedFrom: req.params.id, userId: req.user.id });
+    // userRemix already fetched above
+    const remix = userRemix;
 
     if (!Array.isArray(original.syncRequests)) original.syncRequests = [];
     original.syncRequests.push({
