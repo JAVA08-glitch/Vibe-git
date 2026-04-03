@@ -53,8 +53,12 @@ const CollaborationHub = ({ project, user, onPull, onPush, isOwner, isContributo
     }
   };
 
+<<<<<<< HEAD
   // Show for: remix branch owners on their fork page, OR approved contributors on original project
   const canShowActionHub = isRemixOwner || isContributor;
+=======
+  const canShowActionHub = (isOwner && isRemix) || (!isOwner && project.userRemixId);
+>>>>>>> 165f99f4af745253ece82b867a86b50ec7e4919f
   if (!canShowActionHub) return null;
 
   return (

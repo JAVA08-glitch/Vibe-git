@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { useTheme } from "../context/ThemeContext";
 
-export default function PullSwitch() {
+export default function PullSwitch({ inline = false }) {
   const { theme, toggle } = useTheme();
   const isDark = theme === "dark";
 
@@ -110,7 +110,15 @@ export default function PullSwitch() {
       `}</style>
 
       <div
-        style={{
+        style={inline ? {
+          position: "relative",
+          width: 72,
+          height: 58,
+          flexShrink: 0,
+          pointerEvents: "all",
+          userSelect: "none",
+          overflow: "visible",
+        } : {
           position: "fixed", top: 0, right: 28,
           width: 104, height: 130,
           zIndex: 9999, pointerEvents: "all",
@@ -122,7 +130,8 @@ export default function PullSwitch() {
         <svg
           viewBox="0 0 100 130"
           style={{
-            width: "100%", height: "100%",
+            width: inline ? 72 : "100%",
+            height: inline ? 80 : "100%",
             overflow: "visible",
             cursor: pulling ? "grabbing" : "grab",
             filter: isDark
