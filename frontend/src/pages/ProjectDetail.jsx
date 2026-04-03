@@ -7,8 +7,8 @@ import Avatar from "../components/Avatar";
 import CollaborationHub from "../components/CollaborationHub";
 import RemixRequestButton from "../components/RemixRequestButton";
 import AdminRemixRequests from "../components/AdminRemixRequests";
-import AdminSyncRequests from "../components/AdminSyncRequests";
 import ContributorChanges from "../components/ContributorChanges";
+import workflowManager from "../services/workflowManager";
 import "./ProjectDetail.css";
 
 const BASE = "http://localhost:5000/uploads/";
@@ -120,8 +120,8 @@ export default function ProjectDetail() {
   const fetchSyncRequests = async () => {
     if (!isOwner) return;
     try {
-      const res = await api.get(`/projects/${id}/sync-requests`);
-      setSyncRequests(res.data);
+      const resData = await workflowManager.getSubmissions(id);
+      setSyncRequests(resData);
     } catch (err) { console.error(err); }
   };
 

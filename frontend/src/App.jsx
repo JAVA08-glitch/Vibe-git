@@ -17,8 +17,6 @@ import EditProject from "./pages/EditProject";
 import SyncRequests from "./pages/SyncRequests";
 import Search from "./pages/Search";
 import ProjectIDE from "./pages/ProjectIDE";
-<<<<<<< HEAD
-=======
 import Dashboard from "./pages/Dashboard";
 
 function NightSkyGlobal() {
@@ -27,7 +25,6 @@ function NightSkyGlobal() {
   return <NightSky />;
 }
 
->>>>>>> 165f99f4af745253ece82b867a86b50ec7e4919f
 function AppInner() {
   const { user } = useAuth();
   const [chatOpen, setChatOpen] = useState(false);

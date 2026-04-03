@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import api from '../api/axios';
+import React, { useState } from 'react';
+import { Link } from "react-router-dom";
 
 /**
  * ContributorChanges — Path-based change review for the Code Syncs tab
- * Shows sync requests with file-level detail for admin review
+ * Shows workflow file submissions with detail for admin review
  */
 const ContributorChanges = ({ projectId, isOwner, syncRequests, syncLoading, respondingId, onRespond }) => {
   const [expandedReq, setExpandedReq] = useState(null);
@@ -107,11 +107,19 @@ const ContributorChanges = ({ projectId, isOwner, syncRequests, syncLoading, res
         </div>
       ) : (
         <div>
-          {syncRequests.map(req => {
+          {syncRequests.filter(req => req.workflowStatus === 'pending_review' || req.workflowStatus === 'admin_modified').map(req => {
             const isOpen = expandedReq === req._id;
-            // Derive file changes from rem remix data
-            const changedFiles = req.changedFiles || req.remixId?.files?.map(f => ({ path: f.name, type: 'modified' })) || [];
-            const username = req.requestedBy?.username || 'Unknown';
+            
+            // For workflow logic:
+            // req is a WorkflowFile
+            // req.versions contains the version history.
+            // The latest version should be the pending one
+            const latestVersion = req.versions[req.versions.length - 1];
+            if (!latestVersion) return null;
+
+            const username = latestVersion.createdBy?.username || 'Unknown';
+            const fileName = req.fileName || "unknown_file";
+            const fileType = req.workflowStatus === 'admin_modified' ? 'modified (by admin)' : 'modified';
 
             return (
               <div key={req._id} style={{ ...s.card, borderColor: isOpen ? "rgba(59,130,246,0.3)" : "rgba(255,255,255,0.08)" }}>
@@ -127,14 +135,12 @@ const ContributorChanges = ({ projectId, isOwner, syncRequests, syncLoading, res
                       {username[0].toUpperCase()}
                     </div>
                     <div style={s.cardMeta}>
-                      <p style={s.cardUser}>@{username}</p>
-                      <p style={s.cardTime}>{formatTime(req.createdAt)} · Merge request received</p>
+                      <p style={s.cardUser}>@{username} <span style={{ fontSize: "0.7rem", color: "#888", fontWeight: "normal" }}>({req.workflowStatus.replace("_", " ")})</span></p>
+                      <p style={s.cardTime}>{formatTime(latestVersion.createdAt)} · {latestVersion.contributorComment}</p>
                     </div>
                   </div>
                   <div style={s.cardRight}>
-                    {changedFiles.length > 0 && (
-                      <span style={s.fileCount}>{changedFiles.length} file{changedFiles.length > 1 ? 's' : ''}</span>
-                    )}
+                    <span style={s.fileCount}>1 file</span>
                     <span style={s.expandIcon(isOpen)}>▼</span>
                   </div>
                 </div>
@@ -144,26 +150,22 @@ const ContributorChanges = ({ projectId, isOwner, syncRequests, syncLoading, res
                   <>
                     <div style={s.diffList}>
                       <div style={s.diffHeader}>
-                        <span style={s.diffTitle}>Changed Files</span>
+                        <span style={s.diffTitle}>Submitted Changes</span>
+                        <Link to={`/projects/${projectId}/ide?inspect=true&reqId=${req._id}&versionId=${latestVersion._id}`} style={{ fontSize: "0.75rem", color: "#3b82f6", textDecoration: "none" }}>
+                          🔍 Inspect & Edit Code
+                        </Link>
                       </div>
-                      {changedFiles.length === 0 ? (
-                        <p style={{ fontSize: "0.78rem", color: "#888", padding: "8px 0" }}>No file details available for this request.</p>
-                      ) : (
-                        changedFiles.map((f, i) => (
-                          <div 
-                            key={i} 
-                            style={s.diffFile}
-                            onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
-                            onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.02)"}
-                          >
-                            <div style={s.diffFileName}>
-                              <span style={{ fontSize: "0.8rem" }}>📝</span>
-                              <span style={{ fontSize: "0.8rem", color: "#ccc" }}>{f.path || f.name || f}</span>
-                            </div>
-                            <span style={s.diffBadge(f.type || 'modified')}>{f.type || 'modified'}</span>
-                          </div>
-                        ))
-                      )}
+                      <div 
+                        style={s.diffFile}
+                        onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+                        onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.02)"}
+                      >
+                         <div style={s.diffFileName}>
+                           <span style={{ fontSize: "0.8rem" }}>📝</span>
+                           <span style={{ fontSize: "0.8rem", color: "#ccc" }}>{fileName}</span>
+                         </div>
+                         <span style={s.diffBadge(req.workflowStatus === "admin_modified" ? "added" : 'modified')}>{fileType}</span>
+                      </div>
                     </div>
 
                     {/* Actions */}

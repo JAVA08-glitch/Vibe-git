@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
+import workflowManager from "../services/workflowManager";
 import "./ProjectIDE.css";
 
 const getLanguage = (filename) => {
@@ -42,22 +43,51 @@ export default function ProjectIDE() {
   const [syncSending, setSyncSending] = useState(false);
   const [selectedFileIndex, setSelectedFileIndex] = useState(null);
   const [fileLoading, setFileLoading] = useState(false);
+  const [originalCode, setOriginalCode] = useState("");
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [changeComment, setChangeComment] = useState("");
+
+  const hasUnsavedChanges = code !== originalCode;
 
   const editorRef = useRef(null);
 
   useEffect(() => {
     if (!user) return navigate("/login");
-    api.get(`/projects/${id}`).then(res => {
-      setProject(res.data);
-      if (res.data.files && res.data.files.length > 0) {
-        handleFileSelect(0);
-      } else {
-        setCode(res.data.codeSnippet || "");
-      }
-      setLoading(false);
-    }).catch(() => {
-      navigate("/");
-    });
+    const loadProject = async () => {
+       try {
+         const res = await api.get(`/projects/${id}`);
+         setProject(res.data);
+         const urlParams = new URLSearchParams(window.location.search);
+         const isInspect = urlParams.get("inspect") === "true";
+         const reqIdStr = urlParams.get("reqId");
+         
+         if (isInspect && reqIdStr) {
+            // Load the pending workflow content instead of the saved original
+            const versionIdStr = urlParams.get("versionId");
+            // The fileId is reqIdStr for workflows. We need to find its latest content.
+            // Actually, we can fetch version history and pick the specific version.
+            const wRes = await api.get(`/workflow/version-history`, { params: { projectId: id, fileName: res.data.files?.[0]?.name || "codeSnippet" }});
+            // This is a quick hack, but ideally we'd have a specific endpoint. 
+            // In the new models, versions are returned. Let's find versionId
+            const versionArray = wRes.data || [];
+            const targetVersion = versionArray.find(v => v._id === versionIdStr) || versionArray[versionArray.length - 1];
+            if (targetVersion) {
+               setCode(targetVersion.fileContent);
+               setOriginalCode(targetVersion.fileContent);
+            }
+         } else if (res.data.files && res.data.files.length > 0) {
+           handleFileSelect(0);
+         } else {
+           const fallbackCode = res.data.codeSnippet || "";
+           setCode(fallbackCode);
+           setOriginalCode(fallbackCode);
+         }
+         setLoading(false);
+       } catch (err) {
+         navigate("/");
+       }
+    };
+    loadProject();
   }, [id, user, navigate]);
 
   const handleFileSelect = async (index) => {
@@ -66,8 +96,10 @@ export default function ProjectIDE() {
     try {
       const res = await api.get(`/projects/${id}/files/${index}/content`);
       setCode(res.data.content);
+      setOriginalCode(res.data.content);
     } catch (err) {
       setCode("// Error loading file or file is not text-based.");
+      setOriginalCode("");
     } finally {
       setFileLoading(false);
     }
@@ -101,24 +133,58 @@ export default function ProjectIDE() {
   };
 
   const handlePullUpdates = async () => {
-    if (!window.confirm("Pull latest changes from the original project? This will overwrite your current code and create a new version of your remix.")) return;
+    if (hasUnsavedChanges) {
+      if (!window.confirm("⚠️ Unsaved Changes Warning: You have unsaved edits. If you sync now, they may be overwritten. Proceed anyway?")) {
+        return;
+      }
+    } else {
+      if (!window.confirm("Pull latest approved changes from the original project?")) return;
+    }
+
     try {
-      const res = await api.post(`/projects/${id}/pull`);
-      setProject(res.data);
-      setCode(res.data.codeSnippet || "");
-      alert("Successfully pulled latest changes!");
+      const fileName = selectedFileIndex !== null ? project.files[selectedFileIndex].name : null;
+      if (fileName) {
+         // Use new workflow sync API
+         const latestVersion = await workflowManager.syncLatest(project.remixedFrom._id || project.remixedFrom, fileName);
+         setCode(latestVersion.fileContent);
+         setOriginalCode(latestVersion.fileContent);
+         alert("Successfully synced latest changes!");
+      } else {
+         // Legacy pull
+         const res = await api.post(`/projects/${id}/pull`);
+         setProject(res.data);
+         setCode(res.data.codeSnippet || "");
+         setOriginalCode(res.data.codeSnippet || "");
+         alert("Successfully synced latest changes!");
+      }
     } catch (err) {
-      alert(err.response?.data?.message || "Failed to pull updates");
+      alert(err.response?.data?.message || err.message || "Failed to pull updates");
     }
   };
 
   const handlePushToOriginal = async () => {
+    if (!changeComment.trim()) {
+      alert("Please provide a comment for your changes.");
+      return;
+    }
     setSyncSending(true);
     try {
-      await api.post(`/projects/${project.remixedFrom._id || project.remixedFrom}/sync-request`);
-      alert("✓ Push successful! Sync request sent to the original creator.");
+      const fileName = selectedFileIndex !== null ? project.files[selectedFileIndex].name : "codeSnippet";
+      const projectId = project.remixedFrom ? (project.remixedFrom._id || project.remixedFrom) : project._id;
+      
+      await workflowManager.submitUpdate({
+         projectId,
+         fileName,
+         fileContent: code,
+         changeComment
+      });
+
+      alert("✓ Submission successful! Admin can now review your changes.");
+      setShowSubmitModal(false);
+      setChangeComment("");
+      setOriginalCode(code); // Mark as saved
     } catch (err) {
-      alert(`Error: ${err.response?.data?.message || "Could not push"}`);
+      alert(`Error: ${err.response?.data?.message || err.message || "Could not submit"}`);
     } finally {
       setSyncSending(false);
     }
@@ -147,15 +213,38 @@ export default function ProjectIDE() {
 
   const handleRespondSync = async (action) => {
     try {
-       const res = await api.post(`/projects/${project.remixedFrom._id || project.remixedFrom}/sync-request/${reqId}/respond`, { action });
-       alert(res.data.message);
-       if(action === "approve") {
-          window.location.href = `/dashboard`;
-       } else {
-          window.location.href = `/dashboard`;
-       }
+      if (action === "approve") {
+        await workflowManager.approveVersion(reqId, urlParams.get("versionId"));
+      } else if (action === "decline") {
+        await workflowManager.rejectVersion(reqId, urlParams.get("versionId"));
+      }
+      alert(`Successfully ${action === "approve" ? "approved" : "declined"}!`);
+      navigate("/dashboard");
     } catch(err) {
-       alert(err.response?.data?.message || `Failed to ${action}`);
+       alert(err.response?.data?.message || err.message || `Failed to ${action}`);
+    }
+  };
+
+  const handleAdminModify = async () => {
+    if (!changeComment.trim()) {
+      alert("Please provide an admin comment for the modifications.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await workflowManager.adminModify({
+        fileId: reqId,
+        fileContent: code,
+        adminComment: changeComment
+      });
+      alert("✓ Modifications uploaded successfully!");
+      setShowSubmitModal(false);
+      setChangeComment("");
+      setOriginalCode(code);
+    } catch (err) {
+      alert(err.response?.data?.message || err.message || "Failed to upload corrections");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -177,6 +266,7 @@ export default function ProjectIDE() {
           
           {isInspectMode ? (
             <>
+               <button className="ide-btn" style={{background: "#3b82f6", color: "#fff"}} onClick={() => setShowSubmitModal(true)}>✏️ Upload Corrections</button>
                <button className="ide-btn" style={{background: "#34d399", color: "#000"}} onClick={() => handleRespondSync('approve')}>✓ Approve Merge</button>
                <button className="ide-btn" style={{background: "#ff5f56", color: "#fff"}} onClick={() => handleRespondSync('decline')}>✕ Decline Merge</button>
             </>
@@ -190,8 +280,8 @@ export default function ProjectIDE() {
                   <button className="ide-btn pull-btn" onClick={handlePullUpdates}>
                     ⬇ Sync Updates
                   </button>
-                  <button className="ide-btn push-btn" onClick={handlePushToOriginal} disabled={syncSending}>
-                    {syncSending ? "Syncing..." : "⬆ Request Merge"}
+                  <button className="ide-btn push-btn" onClick={() => setShowSubmitModal(true)} disabled={syncSending}>
+                    {syncSending ? "Submitting..." : "⬆ Submit Update"}
                   </button>
                 </>
               )}
@@ -261,6 +351,33 @@ export default function ProjectIDE() {
            )}
          </div>
       </div>
+      
+      {showSubmitModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ background: "var(--bg-secondary)", padding: "24px", borderRadius: "8px", maxWidth: "400px", width: "100%" }}>
+             <h3 style={{ marginTop: 0 }}>Submit Update</h3>
+             <p style={{ fontSize: "0.85rem", opacity: 0.8, marginBottom: "16px" }}>Describe what changed so the admin can review it easily.</p>
+             <textarea 
+               value={changeComment} 
+               onChange={e => setChangeComment(e.target.value)}
+               placeholder="e.g., Fixed minor bug in header loop"
+               style={{ width: "100%", padding: "12px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--text)", minHeight: "80px", marginBottom: "16px" }}
+             />
+             <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+               <button className="ide-btn" style={{ background: "transparent", border: "1px solid var(--border)" }} onClick={() => setShowSubmitModal(false)}>Cancel</button>
+               {isInspectMode ? (
+                 <button className="ide-btn" style={{ background: "#3b82f6", color: "#fff" }} onClick={handleAdminModify} disabled={saving}>
+                   {saving ? "Uploading..." : "Upload Corrections"}
+                 </button>
+               ) : (
+                 <button className="ide-btn" style={{ background: "var(--accent)", color: "#fff" }} onClick={handlePushToOriginal} disabled={syncSending}>
+                   {syncSending ? "Submitting..." : "Submit"}
+                 </button>
+               )}
+             </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

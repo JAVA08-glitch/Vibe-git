@@ -18,6 +18,7 @@ app.use("/activity", require("./routes/activityRoutes"));
 app.use("/messages", require("./routes/messageRoutes"));
 app.use("/notifications", require("./routes/notificationRoutes"));
 app.use("/branches", require("./routes/branchRoutes"));
+app.use("/workflow", require("./routes/workflowRoutes"));
 
 app.get("/", (req, res) => res.send("API Running 🚀"));
 
