@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import "./Avatar.css";
 
-const BASE = "http://localhost:5000/uploads/";
+const BASE = `${process.env.REACT_APP_API_URL || "http://localhost:5000"}/uploads/`;
 
 export default function Avatar({ user, size = 40, className = "" }) {
   const [imgError, setImgError] = useState(false);

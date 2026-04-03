@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
 import "./ChatModal.css";
-const BASE = "http://localhost:5000/uploads/";
+const BASE = `${process.env.REACT_APP_API_URL || "http://localhost:5000"}/uploads/`;
 
 function Avatar({ user, size = 34 }) {
   const url = user?.avatar ? `${BASE}${user.avatar}` : null;

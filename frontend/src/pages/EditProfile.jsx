@@ -4,7 +4,7 @@ import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
 import "./EditProfile.css";
 
-const AVATAR_BASE = "http://localhost:5000/uploads/";
+const AVATAR_BASE = `${process.env.REACT_APP_API_URL || "http://localhost:5000"}/uploads/`;
 
 export default function EditProfile() {
   const { id } = useParams();
