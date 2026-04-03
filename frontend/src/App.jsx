@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import Navbar from "./components/Navbar";
 import ChatModal from "./components/ChatModal";
+import PullSwitch from "./components/PullSwitch";
 import Explore from "./pages/Explore";
 import Feed from "./pages/Feed";
 import Create from "./pages/Create";
@@ -36,6 +37,7 @@ function AppInner() {
   return (
     <BrowserRouter>
       <Navbar setChatOpen={setChatOpen} />
+      <PullSwitch />
       <Routes>
         <Route path="/" element={<Explore />} />
         <Route path="/feed" element={<Feed />} />

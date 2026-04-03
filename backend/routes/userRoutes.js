@@ -19,17 +19,18 @@ router.get("/", optionalAuth, async (req, res) => {
   try {
     const users = await User.find({ isPrivate: { $ne: true } })
       .select("-password")
-      .sort({ createdAt: -1 })
-      .limit(20);
+      .limit(50);
     
-    // Add project counts and follower info
+    // Enrich with project counts, sort by followers desc
     const enriched = await Promise.all(users.map(async u => {
       const pCount = await Project.countDocuments({ userId: u._id });
       const isFollowing = req.user ? u.followers.map(id => id.toString()).includes(req.user.id) : false;
       return { ...u.toObject(), projectCount: pCount, isFollowing };
     }));
 
-    res.json(enriched);
+    enriched.sort((a, b) => (b.followers?.length || 0) - (a.followers?.length || 0));
+
+    res.json(enriched.slice(0, 20));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

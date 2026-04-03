@@ -252,16 +252,10 @@ export default function Navbar({ setChatOpen }) {
             title="Preferences"
             style={{ fontSize: "1rem", padding: "0.35rem 0.5rem" }}
           >
-            {theme === "dark" ? "🌙" : "☀️"}
+            ⚙️
           </button>
           {showPrefs && (
             <div className="prefs-panel">
-              <div className="prefs-row">
-                <span>Theme</span>
-                <button className="nav-btn" onClick={toggle}>
-                  {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
-                </button>
-              </div>
               <div className="prefs-row">
                 <span>Accent</span>
                 <div className="accent-swatches">

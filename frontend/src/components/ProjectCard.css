@@ -1,7 +1,7 @@
 .project-card {
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
+  border-radius: 4px;
   padding: 1.1rem 1.2rem 1rem;
   display: flex;
   flex-direction: column;
@@ -247,10 +247,8 @@
 
 /* ── TILE mode — square card, content clipped, hover overlay ── */
 .project-card.tile {
-  border-radius: 0;
-  border: none;
-  border-bottom: 1px solid var(--border-soft);
-  border-right: 1px solid var(--border-soft);
+  border-radius: 4px;
+  border: 1px solid var(--border-soft);
   aspect-ratio: 1 / 1;
   overflow: hidden;
   padding: 0.9rem;
