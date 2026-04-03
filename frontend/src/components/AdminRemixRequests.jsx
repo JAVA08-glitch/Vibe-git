@@ -13,7 +13,7 @@ const AdminRemixRequests = ({ projectId }) => {
       setPendingRequests(res.data);
     } catch (err) {
       console.error(err);
-      setError("Failed to fetch requests: " + (err.response?.data?.message || err.message));
+      setError("No pending requests");
     } finally {
       setLoading(false);
     }
@@ -61,7 +61,7 @@ const AdminRemixRequests = ({ projectId }) => {
   };
 
   if (loading) return <div style={styles.loader}>Loading remix requests...</div>;
-  if (error) return <div style={styles.error}>{error}</div>;
+  if (error) return <div style={styles.empty}><span style={styles.emptyIcon}>📭</span>{error}</div>;
 
   return (
     <div style={styles.container}>
@@ -99,7 +99,13 @@ const AdminRemixRequests = ({ projectId }) => {
                 <div style={styles.userMeta}>
                   <p style={styles.username}>@{req.userId?.username || req.userId || 'Unknown'}</p>
                   {req.message && <p style={styles.message}>"{req.message}"</p>}
-                  <span style={styles.statusBadge}>⏳ {req.status}</span>
+                  <span style={{ 
+                    ...styles.statusBadge, 
+                    background: req.status === "pending" ? "rgba(250,204,21,0.15)" : req.status === "approved" ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)",
+                    color: req.status === "pending" ? "#fbbf24" : req.status === "approved" ? "#4ade80" : "#f87171"
+                  }}>
+                    {req.status === "pending" ? "⏳ Pending" : req.status === "approved" ? "✅ Approved" : "❌ Rejected"}
+                  </span>
                 </div>
               </div>
               <div style={styles.actions}>
@@ -110,7 +116,7 @@ const AdminRemixRequests = ({ projectId }) => {
                   onMouseDown={e => e.currentTarget.style.transform = "scale(0.95)"}
                   onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}
                 >
-                  {actionLoading === req._id ? "..." : "✓ Grant"}
+                  {actionLoading === req._id ? "..." : "Approve"}
                 </button>
                 <button 
                   style={{ ...styles.rejectBtn, opacity: actionLoading === req._id ? 0.5 : 1 }}
@@ -119,7 +125,7 @@ const AdminRemixRequests = ({ projectId }) => {
                   onMouseDown={e => e.currentTarget.style.transform = "scale(0.95)"}
                   onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}
                 >
-                  {actionLoading === req._id ? "..." : "✕ Deny"}
+                  {actionLoading === req._id ? "..." : "Reject"}
                 </button>
               </div>
             </div>

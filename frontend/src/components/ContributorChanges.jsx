@@ -128,7 +128,7 @@ const ContributorChanges = ({ projectId, isOwner, syncRequests, syncLoading, res
                     </div>
                     <div style={s.cardMeta}>
                       <p style={s.cardUser}>@{username}</p>
-                      <p style={s.cardTime}>{formatTime(req.createdAt)} · wants to merge changes</p>
+                      <p style={s.cardTime}>{formatTime(req.createdAt)} · Merge request received</p>
                     </div>
                   </div>
                   <div style={s.cardRight}>
@@ -173,14 +173,14 @@ const ContributorChanges = ({ projectId, isOwner, syncRequests, syncLoading, res
                         disabled={respondingId === req._id}
                         onClick={() => onRespond(req._id, "approve")}
                       >
-                        {respondingId === req._id ? "Processing..." : "✓ Approve & Merge"}
+                        {respondingId === req._id ? "Processing..." : "Merge"}
                       </button>
                       <button 
                         style={{ ...s.rejectBtn, opacity: respondingId === req._id ? 0.5 : 1 }}
                         disabled={respondingId === req._id}
                         onClick={() => onRespond(req._id, "decline")}
                       >
-                        {respondingId === req._id ? "Processing..." : "✕ Reject"}
+                        {respondingId === req._id ? "Processing..." : "Reject"}
                       </button>
                     </div>
                   </>

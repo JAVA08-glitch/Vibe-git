@@ -40,8 +40,8 @@ export default function Navbar({ setChatOpen }) {
       import("../api/axios").then(m => m.default.get("/notifications"))
         .then(res => {
           setNotifications(res.data);
-          const unread = res.data.some(n => !n.isRead);
-          setNotifUnread(unread);
+          const unreadCount = res.data.filter(n => !n.isRead).length;
+          setNotifUnread(unreadCount > 0 ? unreadCount : false);
         })
         .catch(() => {});
     };
@@ -171,7 +171,18 @@ export default function Navbar({ setChatOpen }) {
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
                 <path d="M13.73 21a2 2 0 0 1-3.46 0" />
               </svg>
-              {notifUnread && <span className="nav-msg-badge" style={{ background: "#ef4444" }} />}
+              {notifUnread && <span className="nav-msg-badge" style={{ 
+                background: "#ef4444", 
+                width: "auto", 
+                minWidth: "16px", 
+                height: "16px", 
+                borderRadius: "10px", 
+                padding: "0 4px", 
+                fontSize: "0.65rem", 
+                display: "flex", 
+                alignItems: "center", 
+                justifyContent: "center" 
+              }}>{notifUnread}</span>}
             </button>
             
             {showNotifications && (

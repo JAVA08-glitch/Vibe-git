@@ -197,7 +197,7 @@ router.post("/:id/convert", auth, async (req, res) => {
       files: idea.files,
       status: "idea", 
       userId: req.user.id,
-      allowedRemixers: idea.contributors 
+      remixers: idea.contributors 
     });
 
     await Activity.create({ userId: req.user.id, type: "created", projectId: project._id, meta: `Converted idea to project: ${project.title}` });

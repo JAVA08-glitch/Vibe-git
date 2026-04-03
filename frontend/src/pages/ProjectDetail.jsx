@@ -98,13 +98,15 @@ export default function ProjectDetail() {
   const [showSendConfirm, setShowSendConfirm]   = useState(false);
   const [followingAuthor, setFollowingAuthor]   = useState(false);
   const [remixRequests, setRemixRequests]       = useState([]);
+  const [projectNotifications, setProjectNotifications] = useState([]);
+  const [isAdminHubLoading, setIsAdminHubLoading] = useState(false);
 
-  const isOwner = user && project && user.id === (project.userId?._id || project.userId)?.toString();
+  const isOwner = user && project && user.id === (project.owner?._id || project.owner || project.userId?._id || project.userId)?.toString();
   const isMainAdmin = user && project && user.id === (project.rootCreatorId?._id || project.rootCreatorId || project.userId?._id || project.userId)?.toString();
   const isRemix = !!project?.remixedFrom;
-  const isAllowedRemixer = project?.allowedRemixers?.some(u => (u._id || u).toString() === user?.id);
-  const isContributor = user && project && !isOwner && isAllowedRemixer;
-  const isGuest = !user || (project && !isOwner && !isContributor);
+  const isContributor = user && project && project.allowedRemixers?.some(u => (u._id || u).toString() === user?.id);
+  const isGuest = user && project && !isOwner && !isContributor;
+  const isLoggedOut = !user;
 
   const fetchSyncRequests = async () => {
     if (!isOwner) return;
@@ -119,6 +121,14 @@ export default function ProjectDetail() {
     try {
       const res = await api.get(`/projects/${id}/remix-requests`);
       setRemixRequests(res.data);
+    } catch (err) { console.error(err); }
+  };
+
+  const fetchProjectNotifications = async () => {
+    if (!user) return;
+    try {
+      const res = await api.get(`/projects/${id}/notifications`);
+      setProjectNotifications(res.data);
     } catch (err) { console.error(err); }
   };
 
@@ -138,11 +148,13 @@ export default function ProjectDetail() {
 
     fetchSyncRequests();
     fetchRemixRequests();
+    fetchProjectNotifications();
 
     const interval = setInterval(() => {
       if (isOwner || isMainAdmin) {
         fetchSyncRequests();
         fetchRemixRequests();
+        fetchProjectNotifications();
       }
     }, 10000);
 
@@ -241,10 +253,11 @@ export default function ProjectDetail() {
     }
   };
 
-  const handlePullUpdates = async () => {
+  const handlePullUpdates = async (targetId) => {
+    const pid = targetId || id;
     if (!window.confirm("Pull latest changes from the original project?")) return;
     try {
-      const res = await api.post(`/projects/${id}/pull`);
+      const res = await api.post(`/projects/${pid}/pull`);
       setProject(res.data);
       showToast("Successfully pulled latest changes from the original project!", "success", "Pull Successful ⬇");
     } catch (err) {
@@ -252,10 +265,11 @@ export default function ProjectDetail() {
     }
   };
 
-  const handlePushToOriginal = async () => {
+  const handlePushToOriginal = async (targetId) => {
     setSyncSending(true);
+    const pid = targetId || (project.remixedFrom?._id || project.remixedFrom);
     try {
-      await api.post(`/projects/${project.remixedFrom._id || project.remixedFrom}/sync-request`);
+      await api.post(`/projects/${pid}/sync-request`);
       setSyncRequestSent(true);
       showToast("Push successful! Sync request sent to the original creator.", "success", "Pushed ⬆");
     } catch (err) {
@@ -386,11 +400,12 @@ export default function ProjectDetail() {
                       background: "rgba(168,85,247,0.15)", color: "#c084fc", 
                       fontWeight: 700, textTransform: "uppercase", border: "1px solid rgba(168,85,247,0.2)" 
                     }}>Admin</span>
-                  ) : (
+                  ) : null}
+                  {userId === (project.owner?._id || project.owner || project.userId?._id || project.userId)?.toString() && (
                     <span style={{ 
                       fontSize: "0.65rem", padding: "2px 8px", borderRadius: "4px", 
-                      background: "rgba(59,130,246,0.15)", color: "#60a5fa", 
-                      fontWeight: 700, textTransform: "uppercase", border: "1px solid rgba(59,130,246,0.2)" 
+                      background: "rgba(34,197,94,0.15)", color: "#4ade80", 
+                      fontWeight: 700, textTransform: "uppercase", border: "1px solid rgba(34,197,94,0.2)" 
                     }}>Owner</span>
                   )}
                 </div>
@@ -446,15 +461,38 @@ export default function ProjectDetail() {
             )}
 
             {isContributor && (
-              <div className="contributor-actions">
-                <button
-                  className={`sync-requests-btn ${showSyncPanel ? "active" : ""}`}
-                  onClick={handleOpenSyncPanel}
+              <div className="contributor-actions" style={{ display: 'flex', gap: '8px' }}>
+                <button className="action-btn-accent" onClick={() => navigate(`/projects/${project.userRemixId || id}/ide`)}>💻 Web IDE</button>
+                <button 
+                  className={`action-btn-p ${syncSending ? "loading" : ""}`} 
+                  onClick={async () => {
+                    setSyncSending(true);
+                    try {
+                      await api.post(`/projects/${project.userRemixId || id}/sync`);
+                      showToast("Updates synchronized successfully!", "success", "Sync Complete 🔄");
+                    } catch (err) {
+                      showToast(err.response?.data?.message || "Sync failed", "error", "Error");
+                    } finally {
+                      setSyncSending(false);
+                    }
+                  }}
+                  disabled={syncSending}
                 >
-                  🛠️ My Contribution
+                  🔄 Sync Updates
                 </button>
-                <button className="remix-btn" onClick={handleRemix} disabled={remixing}>
-                  {remixing ? "Branching..." : "🔁 Create Remix"}
+                <button 
+                  className="action-btn-accent"
+                  onClick={async () => {
+                    try {
+                      await api.post(`/projects/${project.userRemixId || id}/request-merge`);
+                      setSyncRequestSent(true);
+                      showToast("Merge request sent to the owner!", "success", "Request Sent 🚀");
+                    } catch (err) {
+                      showToast(err.response?.data?.message || "Failed to send merge request", "error", "Error");
+                    }
+                  }}
+                >
+                  🚀 Request Merge
                 </button>
               </div>
             )}
@@ -478,6 +516,7 @@ export default function ProjectDetail() {
           onPull={handlePullUpdates}
           onPush={handlePushToOriginal}
           isOwner={isOwner}
+          isContributor={isContributor}
           syncSending={syncSending}
           syncRequestSent={syncRequestSent}
         />
@@ -498,12 +537,6 @@ export default function ProjectDetail() {
                   onClick={() => setActiveControlTab("syncRequests")}
                 >
                   Code Syncs {project.syncRequests?.filter(r => r.status === "pending").length > 0 && `(${project.syncRequests.filter(r => r.status === "pending").length})`}
-                </button>
-                <button 
-                  style={{ flex: 1, padding: "14px 0", background: activeControlTab === "notifications" ? "rgba(59, 130, 246, 0.1)" : "transparent", border: "none", borderBottom: activeControlTab === "notifications" ? "2px solid #3b82f6" : "2px solid transparent", color: activeControlTab === "notifications" ? "#fff" : "#888", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}
-                  onClick={() => setActiveControlTab("notifications")}
-                >
-                  Activity
                 </button>
                 <button 
                   style={{ flex: 1, padding: "14px 0", background: activeControlTab === "settings" ? "rgba(59, 130, 246, 0.1)" : "transparent", border: "none", borderBottom: activeControlTab === "settings" ? "2px solid #3b82f6" : "2px solid transparent", color: activeControlTab === "settings" ? "#fff" : "#888", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}
@@ -577,8 +610,8 @@ export default function ProjectDetail() {
                               <span className="sync-request-text" style={{ fontWeight: "bold", color: "#fff", fontSize: "0.9rem" }}>
                                 @{userObj.username || "unknown"}
                               </span>
-                              {userObj._id === (project.userId?._id || project.userId) && (
-                                <span style={{ fontSize: "0.6rem", color: "var(--accent)", fontWeight: "bold" }}>PROJECT OWNER</span>
+                              {(userObj._id || userObj) === (project.owner?._id || project.owner || project.userId?._id || project.userId) && (
+                                <span style={{ fontSize: "0.6rem", color: "#4ade80", fontWeight: "bold" }}>OWNER</span>
                               )}
                             </div>
                           </div>
@@ -601,7 +634,7 @@ export default function ProjectDetail() {
 
         {/* ── Role Hubs & Activity ── */}
         
-        {isOwner && isRemix && (
+        {isOwner && project.remixedFrom && (
           <div className="collaboration-hub">
             <h3 className="hub-title">🔄 Version Control (Sync & Remix)</h3>
             <p className="hub-desc">This project is a branch (remix). You can pull the latest changes from the original creator, or push your own updates back to them.</p>
@@ -617,25 +650,21 @@ export default function ProjectDetail() {
           </div>
         )}
 
-        {isContributor && showSyncPanel && (
-          <div className="sync-panel contributor-hub-expanded">
-            <div className="sync-panel-header">
-              <span className="sync-panel-title">My Contribution Workspace</span>
-              <button className="sync-panel-close" onClick={() => setShowSyncPanel(false)}>✕</button>
-            </div>
-            <div style={{ padding: "1.5rem" }}>
-               <div className="contributor-status-card" style={{ background: "rgba(39,201,63,0.05)", border: "1px solid rgba(39,201,63,0.15)", padding: "16px", borderRadius: "10px", marginBottom: "20px" }}>
-                  <h4 style={{ margin: "0 0 8px 0", color: "#27c93f" }}>Approved Contributor</h4>
-                  <p style={{ margin: 0, fontSize: "0.85rem", opacity: 0.8 }}>The owner has granted you write access. You can propose changes via Sync Requests.</p>
-               </div>
-               <div className="hub-actions" style={{ display: "flex", gap: "12px" }}>
-                  <button className="hub-btn pull-btn" style={{ flex: 1 }} onClick={handlePullUpdates}>
-                    ⬇ Pull (Fetch Latest)
-                  </button>
-                  <button className="hub-btn push-btn" style={{ flex: 1 }} onClick={() => setShowSendConfirm(true)}>
-                    ⬆ Push (Request Sync)
-                  </button>
-               </div>
+        {isContributor && (
+          <div className="contributor-status-card" style={{ background: "rgba(39,201,63,0.05)", border: "1px solid rgba(39,201,63,0.15)", padding: "16px", borderRadius: "10px", marginBottom: "20px" }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h4 style={{ margin: "0 0 4px 0", color: "#27c93f" }}>Approved Contributor</h4>
+                <p style={{ margin: 0, fontSize: "0.85rem", opacity: 0.8 }}>You have permission to propose changes to this project.</p>
+              </div>
+              <span style={{ 
+                fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", 
+                background: syncRequestSent ? "rgba(59,130,246,0.1)" : "rgba(34,197,94,0.1)", 
+                color: syncRequestSent ? "#60a5fa" : "#27c93f",
+                fontWeight: "bold" 
+              }}>
+                {syncRequestSent ? "Changes pending review" : "Up to Date"}
+              </span>
             </div>
           </div>
         )}

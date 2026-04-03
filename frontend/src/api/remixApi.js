@@ -11,3 +11,4 @@ export const fetchRemixRequests = (projectId) => {
 export const respondToRemixRequest = (projectId, requestId, action) => {
   return api.post(`/projects/${projectId}/respond-remix`, { requestId, action });
 };
+

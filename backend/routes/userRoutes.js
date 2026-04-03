@@ -14,6 +14,27 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 
+// GET /users — Fetch top user profiles for Explore
+router.get("/", optionalAuth, async (req, res) => {
+  try {
+    const users = await User.find({ isPrivate: { $ne: true } })
+      .select("-password")
+      .sort({ createdAt: -1 })
+      .limit(20);
+    
+    // Add project counts and follower info
+    const enriched = await Promise.all(users.map(async u => {
+      const pCount = await Project.countDocuments({ userId: u._id });
+      const isFollowing = req.user ? u.followers.map(id => id.toString()).includes(req.user.id) : false;
+      return { ...u.toObject(), projectCount: pCount, isFollowing };
+    }));
+
+    res.json(enriched);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /users/suggestions — Find users to follow
 router.get("/suggestions", auth, async (req, res) => {
   try {

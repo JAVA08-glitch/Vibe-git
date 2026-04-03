@@ -31,6 +31,6 @@ describe("Idea Collaboration System Tests", () => {
   it("should convert idea to project", async () => {
     // 1. create Idea
     // 2. call POST /ideas/<id>/convert
-    // 3. assert Project is created with Idea fields and contributors as allowedRemixers
+    // 3. assert Project is created with Idea fields and contributors as remixers
   });
 });

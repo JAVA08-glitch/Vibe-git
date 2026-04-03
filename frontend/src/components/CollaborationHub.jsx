@@ -30,7 +30,7 @@ const CollaborationHub = ({ project, user, onPull, onPush, isOwner, syncSending,
     if (type === "pull") {
       addOutput("Syncing updates from upstream...");
       try {
-        await onPull();
+        await onPull(targetProjectId);
         addOutput("✔ Updates synced successfully");
       } catch (err) {
         addOutput("❌ Sync failed — retry");
@@ -38,7 +38,8 @@ const CollaborationHub = ({ project, user, onPull, onPush, isOwner, syncSending,
     } else if (type === "push") {
       addOutput("Secure request initiated...");
       try {
-        await onPush();
+        // onPush logic in parent uses projectId, we should ensure it uses the remix ID
+        await onPush(targetProjectId);
         addOutput("✔ Merge Request Sent");
       } catch (err) {
         addOutput("❌ Sync failed — retry");
@@ -46,7 +47,10 @@ const CollaborationHub = ({ project, user, onPull, onPush, isOwner, syncSending,
     }
   };
 
-  if (!isOwner || !isRemix) return null;
+  const canShowActionHub = (isOwner && isRemix) || (isContributor && project.userRemixId);
+  if (!canShowActionHub) return null;
+  
+  const targetProjectId = project.userRemixId || project._id;
 
   return (
     <div className="collab-hub-container" style={{ marginTop: "24px" }}>

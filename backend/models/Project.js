@@ -42,6 +42,7 @@ const projectSchema = new mongoose.Schema({
   currentVersion: { type: Number, default: 1 },
 
   userId:       { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  owner:        { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   ownerRole:    { type: String, enum: ["user", "admin"], default: "user" },
   rootCreatorId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   likes:        [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
