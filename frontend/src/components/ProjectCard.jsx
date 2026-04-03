@@ -77,6 +77,7 @@ export default function ProjectCard({ project, compact = false, tile = false, on
   const username = project.userId?.username || "unknown";
   const userId = project.userId?._id || project.userId;
   const isOwner = user && user.id === (project.userId?._id || project.userId)?.toString();
+  const isMainAdmin = user && project && user.id === (project.rootCreatorId?._id || project.rootCreatorId || project.userId?._id || project.userId)?.toString();
   const badge = STATUS_BADGE[project.status] || STATUS_BADGE["idea"];
 
   return (
@@ -101,17 +102,33 @@ export default function ProjectCard({ project, compact = false, tile = false, on
         </div>
       )}
 
-      <div className="card-header">
-        <div className="card-header-left">
+      <div className="card-header" style={{ flexWrap: "wrap", gap: "10px", alignItems: "flex-start" }}>
+        <div className="card-header-left" style={{ flex: "1 1 200px", minWidth: 0 }}>
           <Avatar user={project.userId} size={32} className="card-avatar-comp" />
-          <Link to={`/profile/${userId}`} className="card-username" onClick={e => e.stopPropagation()}>
-            @{username}
-          </Link>
+          <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+              <Link to={`/profile/${userId}`} className="card-username" onClick={e => e.stopPropagation()} style={{ fontSize: "0.9rem", fontWeight: 700 }}>
+                @{username}
+              </Link>
+              {project.rootCreatorId && (project.rootCreatorId?._id || project.rootCreatorId).toString() === (project.userId?._id || project.userId).toString() ? (
+                <span style={{ fontSize: "0.55rem", padding: "1px 5px", background: "rgba(168,85,247,0.15)", color: "#c084fc", borderRadius: "4px", fontWeight: "bold", textTransform: "uppercase", border: "1px solid rgba(168,85,247,0.2)" }}>Admin</span>
+              ) : (
+                <span style={{ fontSize: "0.55rem", padding: "1px 5px", background: "rgba(59,130,246,0.15)", color: "#60a5fa", borderRadius: "4px", fontWeight: "bold", textTransform: "uppercase", border: "1px solid rgba(59,130,246,0.2)" }}>Owner</span>
+              )}
+            </div>
+            <span style={{ fontSize: "0.65rem", color: "var(--text-faint)", opacity: 0.7 }}>
+              Last active {new Date(project.updatedAt || project.createdAt).toLocaleDateString()}
+            </span>
+          </div>
         </div>
-        <div className="card-header-right">
-          <span className={`status-badge ${badge.cls}`}>{badge.icon} {badge.label}</span>
-          {isOwner && <button className="edit-btn" onClick={e => { e.stopPropagation(); navigate(`/projects/${project._id}/edit`); }}>✏️</button>}
-          {isOwner && <button className="delete-btn" onClick={handleDelete}>✕</button>}
+        <div className="card-header-right" style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+          <span className={`status-badge ${badge.cls}`} style={{ whiteSpace: "nowrap" }}>{badge.icon} {badge.label}</span>
+          {isOwner && (
+            <div style={{ display: "flex", gap: "4px" }}>
+              <button className="edit-btn" onClick={e => { e.stopPropagation(); navigate(`/projects/${project._id}/edit`); }}>✏️</button>
+              <button className="delete-btn" onClick={handleDelete}>✕</button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -179,6 +196,26 @@ export default function ProjectCard({ project, compact = false, tile = false, on
                 <path d="M18 9a9 9 0 0 1-9 9" />
               </svg>
               <span>{project.remixCount}</span>
+            </div>
+          )}
+
+          {(isOwner || isMainAdmin) && (project.remixAccessRequests?.some(r => r.status === "pending") || project.syncRequests?.some(r => r.status === "pending")) && (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginLeft: "12px" }}>
+              {(project.syncRequests?.filter(r => r.status === "pending").length > 0) && (
+                <div style={{ display: "flex", alignItems: "center", gap: "4px", color: "#fbbf24", fontSize: "0.7rem", fontWeight: "bold" }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: 12, height: 12 }}>
+                    <line x1="6" y1="3" x2="6" y2="15" />
+                    <circle cx="18" cy="6" r="3" />
+                    <circle cx="6" cy="18" r="3" />
+                    <path d="M18 9a9 9 0 0 1-9 9" />
+                  </svg>
+                  <span>{project.syncRequests.filter(r => r.status === "pending").length}</span>
+                </div>
+              )}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", color: "#fbbf24", fontSize: "0.7rem", fontWeight: "bold" }} title="Pending Requests">
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#fbbf24" }}></span>
+                Requests
+              </div>
             </div>
           )}
         </div>

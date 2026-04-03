@@ -7,6 +7,8 @@ import Avatar from "../components/Avatar";
 import CollaborationHub from "../components/CollaborationHub";
 import RemixRequestButton from "../components/RemixRequestButton";
 import AdminRemixRequests from "../components/AdminRemixRequests";
+import AdminSyncRequests from "../components/AdminSyncRequests";
+import ContributorChanges from "../components/ContributorChanges";
 import "./ProjectDetail.css";
 
 const BASE = "http://localhost:5000/uploads/";
@@ -95,6 +97,30 @@ export default function ProjectDetail() {
   const [syncSending, setSyncSending]           = useState(false);
   const [showSendConfirm, setShowSendConfirm]   = useState(false);
   const [followingAuthor, setFollowingAuthor]   = useState(false);
+  const [remixRequests, setRemixRequests]       = useState([]);
+
+  const isOwner = user && project && user.id === (project.userId?._id || project.userId)?.toString();
+  const isMainAdmin = user && project && user.id === (project.rootCreatorId?._id || project.rootCreatorId || project.userId?._id || project.userId)?.toString();
+  const isRemix = !!project?.remixedFrom;
+  const isAllowedRemixer = project?.allowedRemixers?.some(u => (u._id || u).toString() === user?.id);
+  const isContributor = user && project && !isOwner && isAllowedRemixer;
+  const isGuest = !user || (project && !isOwner && !isContributor);
+
+  const fetchSyncRequests = async () => {
+    if (!isOwner) return;
+    try {
+      const res = await api.get(`/projects/${id}/sync-requests`);
+      setSyncRequests(res.data);
+    } catch (err) { console.error(err); }
+  };
+
+  const fetchRemixRequests = async () => {
+    if (!isOwner) return;
+    try {
+      const res = await api.get(`/projects/${id}/remix-requests`);
+      setRemixRequests(res.data);
+    } catch (err) { console.error(err); }
+  };
 
   useEffect(() => {
     api.get(`/projects/${id}`).then(res => {
@@ -106,22 +132,29 @@ export default function ProjectDetail() {
       setFollowingAuthor(
         user ? followers.some((f) => f.toString() === String(user.id)) : false
       );
+    }).catch(err => {
+      console.error("Project fetch error:", err);
     }).finally(() => setLoading(false));
-  }, [id, user]);
 
-  const isOwner = user && project && user.id === (project.userId?._id || project.userId)?.toString();
+    fetchSyncRequests();
+    fetchRemixRequests();
+
+    const interval = setInterval(() => {
+      if (isOwner || isMainAdmin) {
+        fetchSyncRequests();
+        fetchRemixRequests();
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [id, user, isOwner]);
 
   // When owner opens sync panel, load requests
   const handleOpenSyncPanel = async () => {
     setShowSyncPanel(p => !p);
-    setShowAccessPanel(false);
-    if (!showSyncPanel && isOwner) {
-      setSyncLoading(true);
-      try {
-        const res = await api.get(`/projects/${id}/sync-requests`);
-        setSyncRequests(res.data);
-      } catch {}
-      finally { setSyncLoading(false); }
+    setShowControlsPanel(false);
+    if (!showSyncPanel) {
+      if (isOwner) fetchSyncRequests();
     }
   };
 
@@ -151,7 +184,8 @@ export default function ProjectDetail() {
       setShowSendConfirm(false);
       showToast("Your sync request was sent! The creator will review your changes.", "success", "Sync Request Sent 🚀");
     } catch (err) {
-      const msg = err.response?.data?.message || err.message || "Could not send sync request";
+      console.error(err);
+      const msg = err.response?.data?.message || "Could not send sync request";
       showToast(msg, "error", "Could Not Send Request");
     } finally {
       setSyncSending(false);
@@ -328,10 +362,10 @@ export default function ProjectDetail() {
   const username  = project.userId?.username || "unknown";
   const userId    = project.userId?._id || project.userId;
   const badge     = STATUS_BADGE[project.status] || STATUS_BADGE["idea"];
-  const isRemix   = !!project.remixedFrom;
-
-  const isAllowedRemixer = project.allowedRemixers?.some(u => (u._id || u).toString() === user?.id);
-  const hasRequestedAccess = project.remixAccessRequests?.some(r => (r.userId?._id || r.userId).toString() === user?.id && r.status === "pending");
+  
+  const hasRequestedAccess = 
+    project.remixAccessRequests?.some(r => (r.userId?._id || r.userId).toString() === user?.id && r.status === "pending") ||
+    project.remixRequests?.some(r => (r.userId?._id || r.userId).toString() === user?.id && r.status === "pending");
 
   return (
     <div className="detail-page">
@@ -344,7 +378,22 @@ export default function ProjectDetail() {
             <Avatar user={project.userId} size={50} className="detail-avatar-main" />
             <div className="detail-author-meta">
               <div className="detail-author-top">
-                <Link to={`/profile/${userId}`} className="detail-username">@{username}</Link>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <Link to={`/profile/${userId}`} className="detail-username">@{username}</Link>
+                  {project.rootCreatorId && (project.rootCreatorId?._id || project.rootCreatorId).toString() === (project.userId?._id || project.userId).toString() ? (
+                    <span style={{ 
+                      fontSize: "0.65rem", padding: "2px 8px", borderRadius: "4px", 
+                      background: "rgba(168,85,247,0.15)", color: "#c084fc", 
+                      fontWeight: 700, textTransform: "uppercase", border: "1px solid rgba(168,85,247,0.2)" 
+                    }}>Admin</span>
+                  ) : (
+                    <span style={{ 
+                      fontSize: "0.65rem", padding: "2px 8px", borderRadius: "4px", 
+                      background: "rgba(59,130,246,0.15)", color: "#60a5fa", 
+                      fontWeight: 700, textTransform: "uppercase", border: "1px solid rgba(59,130,246,0.2)" 
+                    }}>Owner</span>
+                  )}
+                </div>
                 {!isOwner && (
                   <button
                     type="button"
@@ -379,67 +428,48 @@ export default function ProjectDetail() {
               <div className="owner-controls">
                 <button className="action-btn-outline" onClick={() => navigate(`/projects/${id}/edit`)}>✏️ Edit</button>
                 <button className="action-btn-accent" onClick={() => navigate(`/projects/${id}/ide`)}>💻 Web IDE</button>
-              </div>
-            )}
-
-            {/* Sync button — shown to non-owner who follows creator */}
-            {user && !isOwner && (
-              <div className="action-wrapper" style={{ display: 'inline-block' }}>
                 <button
-                  className={`sync-requests-btn ${showSyncPanel ? "active" : ""}`}
-                  onClick={handleOpenSyncPanel}
-                  title="Contribute changes back to creator"
+                  className={`sync-requests-btn ${showControlsPanel ? "active" : ""}`}
+                  onClick={() => { 
+                    const next = !showControlsPanel;
+                    setShowControlsPanel(next);
+                    if (next) {
+                       setShowSyncPanel(false);
+                       fetchSyncRequests();
+                       fetchRemixRequests();
+                    }
+                  }}
                 >
-                  🔄 Sync Request
+                  ⚙️ Admin Hub
                 </button>
               </div>
             )}
 
-            {/* Contributor Controls — only for owner */}
-            {isOwner && (
-              <button
-                className={`sync-requests-btn ${showControlsPanel ? "active" : ""}`}
-                onClick={() => { 
-                  setShowControlsPanel(p => !p); 
-                  if (!showControlsPanel) handleOpenSyncPanel(); // Pre-fetch sync requests when opening
-                }}
-              >
-                ⚙️ Contributor Controls
-              </button>
+            {isContributor && (
+              <div className="contributor-actions">
+                <button
+                  className={`sync-requests-btn ${showSyncPanel ? "active" : ""}`}
+                  onClick={handleOpenSyncPanel}
+                >
+                  🛠️ My Contribution
+                </button>
+                <button className="remix-btn" onClick={handleRemix} disabled={remixing}>
+                  {remixing ? "Branching..." : "🔁 Create Remix"}
+                </button>
+              </div>
             )}
 
-            {/* Sync Requests for non-owner Remixers */}
-            {!isOwner && isAllowedRemixer && (
-              <button
-                className={`sync-requests-btn ${showSyncPanel ? "active" : ""}`}
-                onClick={handleOpenSyncPanel}
-              >
-                🔄 Contribute Changes
-              </button>
-            )}
-
-            {/* Branch / Request Access — shown to all logged-in users except owner */}
-            {user && !isOwner && (
-              <div className="action-wrapper" style={{ display: 'inline-block' }}>
-                {(project.isPublicRemix || isAllowedRemixer) ? (
-                  <button 
-                    className="remix-btn" 
-                    onClick={handleRemix} 
-                    disabled={remixing}
-                    title="Create your own branch to edit this project"
-                  >
-                    {remixing ? "Branching..." : "🔁 Request Remix"}
-                  </button>
-                ) : (
-                  <RemixRequestButton 
+            {isGuest && user && (
+              <div className="guest-actions">
+                 <RemixRequestButton 
                     projectId={project._id} 
                     initialStatus={hasRequestedAccess ? 'pending' : 'idle'} 
-                  />
-                )}
+                 />
               </div>
             )}
           </div>
         </div>
+
 
         {/* Collaboration Hub Terminal */}
         <CollaborationHub 
@@ -467,7 +497,13 @@ export default function ProjectDetail() {
                   style={{ flex: 1, padding: "14px 0", background: activeControlTab === "syncRequests" ? "rgba(59, 130, 246, 0.1)" : "transparent", border: "none", borderBottom: activeControlTab === "syncRequests" ? "2px solid #3b82f6" : "2px solid transparent", color: activeControlTab === "syncRequests" ? "#fff" : "#888", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}
                   onClick={() => setActiveControlTab("syncRequests")}
                 >
-                  Code Syncs
+                  Code Syncs {project.syncRequests?.filter(r => r.status === "pending").length > 0 && `(${project.syncRequests.filter(r => r.status === "pending").length})`}
+                </button>
+                <button 
+                  style={{ flex: 1, padding: "14px 0", background: activeControlTab === "notifications" ? "rgba(59, 130, 246, 0.1)" : "transparent", border: "none", borderBottom: activeControlTab === "notifications" ? "2px solid #3b82f6" : "2px solid transparent", color: activeControlTab === "notifications" ? "#fff" : "#888", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}
+                  onClick={() => setActiveControlTab("notifications")}
+                >
+                  Activity
                 </button>
                 <button 
                   style={{ flex: 1, padding: "14px 0", background: activeControlTab === "settings" ? "rgba(59, 130, 246, 0.1)" : "transparent", border: "none", borderBottom: activeControlTab === "settings" ? "2px solid #3b82f6" : "2px solid transparent", color: activeControlTab === "settings" ? "#fff" : "#888", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}
@@ -487,48 +523,27 @@ export default function ProjectDetail() {
               )}
 
               {activeControlTab === 'syncRequests' && (
-                <div className="access-section" style={{ border: "none", padding: 0, margin: 0 }}>
-                  <h4 style={{ margin: "0 0 1rem 0", fontSize: "0.95rem", color: "var(--text)" }}>Pending Code Integrations</h4>
-                  {syncLoading ? (
-                    <p className="sync-panel-empty">Loading...</p>
-                  ) : syncRequests.length === 0 ? (
-                    <p className="sync-panel-empty">No sync requests made yet</p>
+                <ContributorChanges
+                  projectId={project._id}
+                  isOwner={isOwner}
+                  syncRequests={syncRequests}
+                  syncLoading={syncLoading}
+                  respondingId={respondingId}
+                  onRespond={handleRespond}
+                />
+              )}
+
+              {activeControlTab === 'notifications' && (
+                <div style={{ maxHeight: "400px", overflowY: "auto" }}>
+                  {project.notifications?.length === 0 ? (
+                    <p className="sync-panel-empty">No activity yet</p>
                   ) : (
-                    <div className="sync-request-list">
-                      {syncRequests.map(req => (
-                        <div key={req._id} className="sync-request-item" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", padding: "12px", borderRadius: "8px", marginBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                            <AvatarWrapper user={req.requestedBy} size={36} />
-                            <div className="sync-info">
-                              <p className="sync-text" style={{ margin: 0, fontSize: "0.85rem", color: "#ccc" }}>
-                                <Link to={`/profile/${req.requestedBy?._id}`} className="sync-user" style={{ fontWeight: "bold", color: "#fff", textDecoration: "none" }}>
-                                  @{req.requestedBy?.username}
-                                </Link>
-                                <span style={{ marginLeft: "6px" }}>wants to sync</span> {req.remixId?.title || "remix"}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="sync-request-actions" style={{ display: "flex", gap: "8px" }}>
-                            <button
-                              className="sr-approve-btn"
-                              style={{ padding: "6px 12px", borderRadius: "6px", fontSize: "0.8rem", border: "none", fontWeight: "bold" }}
-                              disabled={respondingId === req._id}
-                              onClick={() => handleRespond(req._id, "approve")}
-                            >
-                              {respondingId === req._id ? "..." : "Approve"}
-                            </button>
-                            <button
-                              className="sr-decline-btn"
-                              style={{ padding: "6px 12px", borderRadius: "6px", fontSize: "0.8rem", border: "none", fontWeight: "bold" }}
-                              disabled={respondingId === req._id}
-                              onClick={() => handleRespond(req._id, "decline")}
-                            >
-                              {respondingId === req._id ? "..." : "Decline"}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    [...(project.notifications || [])].reverse().map((n, i) => (
+                      <div key={i} style={{ padding: "12px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <span style={{ fontSize: "0.85rem", color: "#ddd" }}>{n.message}</span>
+                        <span style={{ fontSize: "0.7rem", color: "#666" }}>{new Date(n.createdAt).toLocaleString()}</span>
+                      </div>
+                    ))
                   )}
                 </div>
               )}
@@ -558,9 +573,14 @@ export default function ProjectDetail() {
                         <div key={userObj._id} className="sync-request-item" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", padding: "12px", borderRadius: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                             <AvatarWrapper user={userObj} size={36} />
-                            <span className="sync-request-text" style={{ fontWeight: "bold", color: "#fff", fontSize: "0.9rem" }}>
-                              @{userObj.username || "unknown"}
-                            </span>
+                            <div style={{ display: "flex", flexDirection: "column" }}>
+                              <span className="sync-request-text" style={{ fontWeight: "bold", color: "#fff", fontSize: "0.9rem" }}>
+                                @{userObj.username || "unknown"}
+                              </span>
+                              {userObj._id === (project.userId?._id || project.userId) && (
+                                <span style={{ fontSize: "0.6rem", color: "var(--accent)", fontWeight: "bold" }}>PROJECT OWNER</span>
+                              )}
+                            </div>
                           </div>
                           <button 
                             className="sr-decline-btn" 
@@ -579,7 +599,8 @@ export default function ProjectDetail() {
           </div>
         )}
 
-        {/* ── Collaboration Hub (Pull / Push) for Remix Owners ── */}
+        {/* ── Role Hubs & Activity ── */}
+        
         {isOwner && isRemix && (
           <div className="collaboration-hub">
             <h3 className="hub-title">🔄 Version Control (Sync & Remix)</h3>
@@ -596,62 +617,67 @@ export default function ProjectDetail() {
           </div>
         )}
 
-        {/* ── Sync Panel ── */}
-        {showSyncPanel && (
-          <div className="sync-panel">
-            {/* OWNER VIEW WAS MOVED TO CONTROLS PANEL */}
+        {isContributor && showSyncPanel && (
+          <div className="sync-panel contributor-hub-expanded">
+            <div className="sync-panel-header">
+              <span className="sync-panel-title">My Contribution Workspace</span>
+              <button className="sync-panel-close" onClick={() => setShowSyncPanel(false)}>✕</button>
+            </div>
+            <div style={{ padding: "1.5rem" }}>
+               <div className="contributor-status-card" style={{ background: "rgba(39,201,63,0.05)", border: "1px solid rgba(39,201,63,0.15)", padding: "16px", borderRadius: "10px", marginBottom: "20px" }}>
+                  <h4 style={{ margin: "0 0 8px 0", color: "#27c93f" }}>Approved Contributor</h4>
+                  <p style={{ margin: 0, fontSize: "0.85rem", opacity: 0.8 }}>The owner has granted you write access. You can propose changes via Sync Requests.</p>
+               </div>
+               <div className="hub-actions" style={{ display: "flex", gap: "12px" }}>
+                  <button className="hub-btn pull-btn" style={{ flex: 1 }} onClick={handlePullUpdates}>
+                    ⬇ Pull (Fetch Latest)
+                  </button>
+                  <button className="hub-btn push-btn" style={{ flex: 1 }} onClick={() => setShowSendConfirm(true)}>
+                    ⬆ Push (Request Sync)
+                  </button>
+               </div>
+            </div>
+          </div>
+        )}
 
-            {/* REMIXER / NON-OWNER VIEW */}
-            {!isOwner && (
-              <>
-                <div className="sync-panel-header">
-                  <span className="sync-panel-title">Contribute Changes</span>
-                  <button className="sync-panel-close" onClick={() => setShowSyncPanel(false)}>✕</button>
-                </div>
-                
-                {/* Step guide */}
-                {!isAllowedRemixer && !syncRequestSent && (
-                  <div className="sync-confirm">
-                    <p style={{ fontWeight: 700, marginBottom: "0.5rem" }}>How to contribute to this project:</p>
-                    <ol style={{ paddingLeft: "1.2rem", lineHeight: 1.8, fontSize: "0.85rem" }}>
-                      <li>Click <strong>🔒 Request Remix Access</strong> (button in header)</li>
-                      <li>Wait for the owner to approve your request</li>
-                      <li>Once approved, click <strong>🔀 Branch (Remix)</strong> to get your own copy</li>
-                      <li>Edit your branch, then return here to <strong>⬆ Send Sync Request</strong></li>
-                    </ol>
-                    {hasRequestedAccess && (
-                      <p style={{ marginTop: "0.75rem", color: "#f59e0b", fontSize: "0.83rem", fontWeight: 600 }}>
-                        ⏳ Your access request is pending. Wait for owner approval.
-                      </p>
-                    )}
-                  </div>
-                )}
+        {isGuest && (
+          <div className="role-guest-welcome" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", padding: "20px", borderRadius: "12px", marginBottom: "20px" }}>
+             <h4 style={{ margin: "0 0 10px 0" }}>Want to contribute?</h4>
+             <p style={{ margin: "0 0 16px 0", fontSize: "0.9rem", color: "#888" }}>Request remix access to create your own branch. Once approved, you can sync your changes back to the main project.</p>
+             <RemixRequestButton 
+                projectId={project._id} 
+                initialStatus={hasRequestedAccess ? 'pending' : 'idle'} 
+             />
+          </div>
+        )}
 
-                {isAllowedRemixer && (
-                  syncRequestSent ? (
-                    <p className="sync-panel-sent">✓ Sync request sent! The original creator will review your changes.</p>
-                  ) : showSendConfirm ? (
-                    <div className="sync-confirm">
-                      <p>Send your changes to <strong>@{username}</strong>'s project?</p>
-                      <p className="sync-confirm-sub">If they approve, your edits will be merged into the original project.</p>
-                      <div className="sync-confirm-actions">
-                        <button className="sr-approve-btn" onClick={handleSendSyncRequest} disabled={syncSending}>
-                          {syncSending ? "Sending..." : "Send"}
-                        </button>
-                        <button className="sr-decline-btn" onClick={() => setShowSendConfirm(false)}>Cancel</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="sync-confirm">
-                      <p>✅ You have remix access. Contribute your changes back to the original project.</p>
-                      <button className="sr-approve-btn" onClick={() => setShowSendConfirm(true)}>
-                        ⬆ Send Sync Request
-                      </button>
-                    </div>
-                  )
-                )}
-              </>
-            )}
+        {/* ── Sync Request Confirmation Modal (Used by both) ── */}
+        {showSendConfirm && (
+          <div className="sync-panel-overlay">
+            <div className="sync-confirm-modal" style={{ background: "var(--bg-card)", padding: "24px", borderRadius: "12px", border: "1px solid var(--border)", maxWidth: "400px", margin: "100px auto", boxShadow: "0 20px 40px rgba(0,0,0,0.4)" }}>
+              <h3 style={{ margin: "0 0 12px 0" }}>Confirm Sync Request</h3>
+              <p style={{ margin: "0 0 20px 0", fontSize: "0.9rem", color: "#888", lineHeight: "1.5" }}>
+                This will send your current branch changes to <strong>@{username}</strong>. 
+                If they approve, your updates will be merged into the main project.
+              </p>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button 
+                  className="sr-approve-btn" 
+                  style={{ flex: 1, padding: "10px", borderRadius: "6px", border: "none", fontWeight: "bold" }}
+                  onClick={handleSendSyncRequest} 
+                  disabled={syncSending}
+                >
+                  {syncSending ? "Sending..." : "Confirm & Send"}
+                </button>
+                <button 
+                  className="sr-decline-btn" 
+                  style={{ flex: 1, padding: "10px", borderRadius: "6px", border: "none", fontWeight: "bold", background: "rgba(255,255,255,0.05)" }}
+                  onClick={() => setShowSendConfirm(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -734,14 +760,88 @@ export default function ProjectDetail() {
             </div>
           )}
 
-          {project.files?.length > 0 && (
-            <div className="detail-section">
-              <h3>📁 Files ({project.files.length})</h3>
-              <div className="file-viewer-list">
-                {project.files.map((file, i) => <FileViewer key={i} file={file} />)}
+          {project.files?.length > 0 && (() => {
+            const totalSize = project.files.reduce((sum, f) => sum + (f.size || 0), 0);
+            const fmtSize = (b) => b < 1024 ? `${b} B` : b < 1048576 ? `${(b/1024).toFixed(1)} KB` : `${(b/1048576).toFixed(1)} MB`;
+            const codeCount = project.files.filter(f => isCode(f.name)).length;
+            const imgCount  = project.files.filter(f => isImage(f.name)).length;
+            const otherCount = project.files.length - codeCount - imgCount;
+
+            // Group files by top-level folder
+            const grouped = {};
+            project.files.forEach(f => {
+              const parts = f.name.split('/');
+              const folder = parts.length > 1 ? parts[0] : 'root';
+              if (!grouped[folder]) grouped[folder] = [];
+              grouped[folder].push(f);
+            });
+
+            return (
+              <div className="detail-section">
+                {/* Compact Stats Bar */}
+                <div 
+                  onClick={() => setActiveVersion(activeVersion === 'files' ? null : 'files')}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px", cursor: "pointer", transition: "all 0.2s", userSelect: "none" }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)"; e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                    <span style={{ fontSize: "1.4rem" }}>📁</span>
+                    <div>
+                      <span style={{ fontWeight: 700, color: "#fff", fontSize: "0.95rem" }}>
+                        {project.files.length} files
+                      </span>
+                      <span style={{ color: "#666", margin: "0 8px" }}>·</span>
+                      <span style={{ color: "#a0a0a0", fontSize: "0.85rem" }}>{fmtSize(totalSize)}</span>
+                    </div>
+                    <div style={{ display: "flex", gap: "8px", marginLeft: "8px" }}>
+                      {codeCount > 0 && <span style={{ fontSize: "0.72rem", padding: "3px 8px", borderRadius: "6px", background: "rgba(59,130,246,0.1)", color: "#60a5fa", fontWeight: 600 }}>📝 {codeCount} code</span>}
+                      {imgCount > 0  && <span style={{ fontSize: "0.72rem", padding: "3px 8px", borderRadius: "6px", background: "rgba(168,85,247,0.1)", color: "#c084fc", fontWeight: 600 }}>🖼️ {imgCount} media</span>}
+                      {otherCount > 0 && <span style={{ fontSize: "0.72rem", padding: "3px 8px", borderRadius: "6px", background: "rgba(255,255,255,0.05)", color: "#888", fontWeight: 600 }}>📄 {otherCount} other</span>}
+                    </div>
+                  </div>
+                  <span style={{ color: "#888", fontSize: "0.85rem", transition: "transform 0.2s", transform: activeVersion === 'files' ? "rotate(180deg)" : "rotate(0)" }}>▼</span>
+                </div>
+
+                {/* Expanded File Tree */}
+                {activeVersion === 'files' && (
+                  <div style={{ marginTop: "12px", borderLeft: "2px solid rgba(255,255,255,0.06)", paddingLeft: "16px" }}>
+                    {Object.entries(grouped).map(([folder, files]) => (
+                      <div key={folder} style={{ marginBottom: "12px" }}>
+                        {folder !== 'root' && (
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px", padding: "6px 0" }}>
+                            <span style={{ color: "#fbbf24", fontSize: "0.85rem" }}>📂</span>
+                            <span style={{ fontWeight: 700, color: "#e0e0e0", fontSize: "0.85rem" }}>{folder}/</span>
+                            <span style={{ fontSize: "0.7rem", color: "#666" }}>({files.length})</span>
+                          </div>
+                        )}
+                        {files.map((file, i) => {
+                          const ext = getExt(file.name);
+                          const displayName = folder !== 'root' ? file.name.split('/').slice(1).join('/') : file.name;
+                          return (
+                            <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: "6px", background: "rgba(255,255,255,0.02)", marginBottom: "4px", marginLeft: folder !== 'root' ? "16px" : 0, transition: "background 0.15s" }}
+                              onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+                              onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.02)"}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+                                <span style={{ fontSize: "0.8rem" }}>{isImage(file.name) ? "🖼️" : isCode(file.name) ? "📝" : "📄"}</span>
+                                <span style={{ color: "#ddd", fontSize: "0.82rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
+                                <span style={{ fontSize: "0.7rem", color: "#555", background: "rgba(255,255,255,0.05)", padding: "1px 6px", borderRadius: "4px" }}>.{ext}</span>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                                <span style={{ fontSize: "0.72rem", color: "#888" }}>{fmtSize(file.size || 0)}</span>
+                                <a href={`${BASE}${file.path}`} download={file.name} style={{ fontSize: "0.72rem", color: "#60a5fa", textDecoration: "none", padding: "3px 8px", borderRadius: "4px", background: "rgba(59,130,246,0.08)", fontWeight: 600 }}>↓</a>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           <div className="detail-section">
             <h3 className="comments-heading">

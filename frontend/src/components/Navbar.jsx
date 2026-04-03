@@ -18,15 +18,17 @@ export default function Navbar({ setChatOpen }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [search, setSearch] = useState("");
-  const [results, setResults] = useState(null); // { users, projects }
+  const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showPrefs, setShowPrefs] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifUnread, setNotifUnread] = useState(false);
 
   const isActive = (path) => location.pathname === path ? "active-link" : "";
 
-  // Fetch unread count
   useEffect(() => {
     if (!user) return;
     const fetchUnread = () => {
@@ -34,8 +36,22 @@ export default function Navbar({ setChatOpen }) {
         .then(res => setUnreadCount(res.data.count))
         .catch(() => {});
     };
+    const fetchNotifications = () => {
+      import("../api/axios").then(m => m.default.get("/notifications"))
+        .then(res => {
+          setNotifications(res.data);
+          const unread = res.data.some(n => !n.isRead);
+          setNotifUnread(unread);
+        })
+        .catch(() => {});
+    };
+
     fetchUnread();
-    const interval = setInterval(fetchUnread, 15000); // Poll every 15s (increased for optimization)
+    fetchNotifications();
+    const interval = setInterval(() => {
+      fetchUnread();
+      fetchNotifications();
+    }, 15000); 
     
     window.addEventListener("vibe:unread-update", fetchUnread);
     return () => {
@@ -43,6 +59,12 @@ export default function Navbar({ setChatOpen }) {
       window.removeEventListener("vibe:unread-update", fetchUnread);
     }
   }, [user]);
+
+  const markAsRead = () => {
+    import("../api/axios").then(m => m.default.post("/notifications/read"))
+      .then(() => setNotifUnread(false))
+      .catch(() => {});
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -134,6 +156,59 @@ export default function Navbar({ setChatOpen }) {
         <Link to="/" className={isActive("/")}>Explore</Link>
         <Link to="/feed" className={isActive("/feed")}>Feed</Link>
         <Link to="/activity" className={isActive("/activity")}>Activity</Link>
+        
+        {user && (
+          <div className="nav-notif-wrapper" style={{ position: "relative" }}>
+            <button 
+              className="nav-msg-btn" 
+              onClick={() => { 
+                if (!showNotifications) markAsRead();
+                setShowNotifications(!showNotifications); 
+              }} 
+              title="Notifications"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="nav-msg-icon">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+              {notifUnread && <span className="nav-msg-badge" style={{ background: "#ef4444" }} />}
+            </button>
+            
+            {showNotifications && (
+              <div className="notif-dropdown" style={{
+                position: "absolute", top: "100%", right: 0, width: "300px", background: "var(--bg-card)", 
+                border: "1px solid var(--border)", borderRadius: "12px", marginTop: "10px", 
+                boxShadow: "0 10px 25px rgba(0,0,0,0.5)", zIndex: 1000, overflow: "hidden"
+              }}>
+                <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontWeight: "bold", fontSize: "0.9rem" }}>Notifications</span>
+                </div>
+                <div style={{ maxHeight: "350px", overflowY: "auto" }}>
+                  {notifications.length === 0 ? (
+                    <div style={{ padding: "30px 20px", textAlign: "center", color: "#666", fontSize: "0.85rem" }}>
+                      No notifications yet
+                    </div>
+                  ) : (
+                    notifications.map(n => (
+                      <div key={n._id} style={{ 
+                        padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.05)", 
+                        background: n.isRead ? "transparent" : "rgba(59,130,246,0.05)",
+                        cursor: "pointer", transition: "background 0.2s"
+                      }} onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.03)"} onMouseLeave={e => e.currentTarget.style.background = n.isRead ? "transparent" : "rgba(59,130,246,0.05)"}>
+                        <p style={{ margin: 0, fontSize: "0.82rem", color: "#ddd", lineHeight: "1.4" }}>{n.message}</p>
+                        <span style={{ fontSize: "0.7rem", color: "#666" }}>{new Date(n.createdAt).toLocaleDateString()}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <Link to="/activity" style={{ display: "block", textAlign: "center", padding: "10px", fontSize: "0.75rem", color: "var(--accent)", textDecoration: "none", background: "rgba(255,255,255,0.02)" }} onClick={() => setShowNotifications(false)}>
+                  View all activity
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
+
         {user && (
           <button className="nav-msg-btn" onClick={() => setChatOpen(true)} title="Messages">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="nav-msg-icon">

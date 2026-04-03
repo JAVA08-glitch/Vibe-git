@@ -42,6 +42,8 @@ const projectSchema = new mongoose.Schema({
   currentVersion: { type: Number, default: 1 },
 
   userId:       { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  ownerRole:    { type: String, enum: ["user", "admin"], default: "user" },
+  rootCreatorId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   likes:        [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
   comments:     [commentSchema],
   remixedFrom:  { type: mongoose.Schema.Types.ObjectId, ref: "Project", default: null },
@@ -71,6 +73,12 @@ const projectSchema = new mongoose.Schema({
     contributorId: { type: mongoose.Schema.Types.ObjectId, ref: "User",    required: true },
     versionNumber: { type: Number },
     approvedAt:    { type: Date, default: Date.now }
+  }],
+  notifications: [{
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    message: { type: String, required: true },
+    type: { type: String, enum: ["remix-request", "remix-approved", "remix-rejected", "sync-request", "sync-approved", "sync-rejected"], required: true },
+    createdAt: { type: Date, default: Date.now }
   }],
   createdAt:    { type: Date, default: Date.now },
   updatedAt:    { type: Date, default: Date.now }

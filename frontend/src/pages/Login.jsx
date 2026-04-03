@@ -69,7 +69,18 @@ export default function Login() {
     setLoading(true);
     try {
       const endpoint = isSignup ? "/auth/signup" : "/auth/login";
-      const payload = isSignup ? form : { email: form.email, password: form.password };
+      
+      if (!isSignup) {
+        console.log("Login payload:", {
+          identifier: form.email,
+          password: form.password
+        });
+      }
+
+      const payload = isSignup 
+        ? form 
+        : { identifier: form.email, password: form.password };
+        
       const res = await api.post(endpoint, payload);
       login(res.data.user, res.data.token);
       navigate("/");

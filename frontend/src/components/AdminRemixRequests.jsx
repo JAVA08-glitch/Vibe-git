@@ -21,7 +21,7 @@ const AdminRemixRequests = ({ projectId }) => {
 
   useEffect(() => {
     loadRequests();
-    const interval = setInterval(loadRequests, 30000); // 30s auto-refresh
+    const interval = setInterval(loadRequests, 30000);
     return () => clearInterval(interval);
   }, [projectId]);
 
@@ -31,56 +31,95 @@ const AdminRemixRequests = ({ projectId }) => {
       await respondToRemixRequest(projectId, requestId, action);
       setPendingRequests(prev => prev.filter(r => r._id !== requestId));
     } catch (err) {
-      alert("Error responding to request");
+      alert("Error responding to request: " + (err.response?.data?.message || err.message));
     } finally {
       setActionLoading(null);
     }
   };
 
-  if (loading) return <div className="text-gray-400 p-4">Loading requests...</div>;
-  if (error) return <div className="text-red-500 p-4">{error}</div>;
+  /* ── Styles ── */
+  const styles = {
+    container: { margin: 0 },
+    desc: { margin: "0 0 1.25rem 0", fontSize: "0.82rem", color: "#a0a0a0", lineHeight: 1.6 },
+    badge: { display: "inline-flex", alignItems: "center", gap: "6px", background: "rgba(239,68,68,0.15)", color: "#f87171", fontSize: "0.75rem", fontWeight: 700, padding: "4px 10px", borderRadius: "12px", marginBottom: "1rem" },
+    badgeDot: { width: 6, height: 6, borderRadius: "50%", background: "#ef4444", animation: "pulse 2s infinite" },
+    empty: { textAlign: "center", padding: "2rem 1rem", color: "#666", fontSize: "0.85rem" },
+    emptyIcon: { fontSize: "2rem", marginBottom: "0.5rem", display: "block" },
+    card: { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px", padding: "14px 16px", marginBottom: "10px", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "border-color 0.2s, background 0.2s" },
+    cardHover: { borderColor: "rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.05)" },
+    userInfo: { display: "flex", alignItems: "center", gap: "12px", flex: 1, minWidth: 0 },
+    avatar: { width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "0.85rem", flexShrink: 0 },
+    userMeta: { minWidth: 0 },
+    username: { margin: 0, fontSize: "0.9rem", fontWeight: 700, color: "#fff" },
+    message: { margin: "3px 0 0 0", fontSize: "0.78rem", color: "#888", fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "280px" },
+    statusBadge: { margin: "5px 0 0 0", display: "inline-block", fontSize: "0.7rem", fontWeight: 700, padding: "2px 8px", borderRadius: "6px", background: "rgba(250,204,21,0.12)", color: "#fbbf24" },
+    actions: { display: "flex", gap: "8px", flexShrink: 0, marginLeft: "12px" },
+    approveBtn: { padding: "7px 16px", border: "none", borderRadius: "7px", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer", background: "#22c55e", color: "#fff", transition: "opacity 0.2s, transform 0.1s" },
+    rejectBtn: { padding: "7px 16px", border: "none", borderRadius: "7px", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer", background: "#ef4444", color: "#fff", transition: "opacity 0.2s, transform 0.1s" },
+    loader: { textAlign: "center", padding: "2rem", color: "#888", fontSize: "0.85rem" },
+    error: { textAlign: "center", padding: "1rem", color: "#f87171", fontSize: "0.85rem", background: "rgba(239,68,68,0.08)", borderRadius: "8px" },
+  };
+
+  if (loading) return <div style={styles.loader}>Loading remix requests...</div>;
+  if (error) return <div style={styles.error}>{error}</div>;
 
   return (
-    <div className="mt-6 border border-gray-700 rounded-lg p-4 bg-gray-900">
-      <div className="mb-6">
-        <div className="flex justify-between items-center mb-2">
-          <h3 className="text-lg font-bold text-white mb-0">Remix Requests & Contributor Changes</h3>
-          {pendingRequests.length > 0 && (
-            <span className="bg-red-600 text-white text-xs px-3 py-1 rounded-full font-bold">
-              Remix Requests ({pendingRequests.length})
-            </span>
-          )}
+    <div style={styles.container}>
+      <p style={styles.desc}>
+        When a user requests to remix your project, their request appears here. 
+        Approve to grant them a private working branch, or reject to deny access. 
+        All modifications remain secure and under your control.
+      </p>
+
+      {pendingRequests.length > 0 && (
+        <div style={styles.badge}>
+          <span style={styles.badgeDot}></span>
+          {pendingRequests.length} pending request{pendingRequests.length > 1 ? 's' : ''}
         </div>
-        <p className="text-sm text-gray-400 leading-relaxed mb-0">
-          This section allows project owners to manage incoming remix requests and review proposed changes from contributors. When a user requests to remix your project, their request will appear here for approval. Once approved, the contributor will receive access to create a private working branch where they can safely make edits without affecting the main project. Any changes submitted by contributors will also be listed here as sync requests, allowing you to review, approve, or reject updates before merging them into the main project. This ensures that all modifications remain secure, trackable, and under your control while enabling smooth collaboration.
-        </p>
-      </div>
+      )}
 
       {pendingRequests.length === 0 ? (
-        <p className="text-gray-400">No pending remix requests</p>
+        <div style={styles.empty}>
+          <span style={styles.emptyIcon}>📭</span>
+          No pending remix requests
+        </div>
       ) : (
-        <div className="space-y-3 flex flex-col gap-3">
+        <div>
           {pendingRequests.map(req => (
-            <div key={req._id} className="border border-gray-700 bg-gray-800 rounded p-3 flex justify-between items-center hover:border-gray-600 transition">
-              <div>
-                <p className="text-sm text-gray-300 m-0"><span className="font-semibold text-white">User:</span> @{req.userId?.username || req.userId || 'Unknown'}</p>
-                <p className="text-sm text-gray-400 italic m-0 mt-1">"{req.message}"</p>
-                <p className="text-xs text-yellow-500 mt-2 m-0 bg-yellow-500/10 w-max px-2 py-1 rounded">Status: {req.status}</p>
+            <div 
+              key={req._id} 
+              style={styles.card}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)"; e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
+            >
+              <div style={styles.userInfo}>
+                <div style={styles.avatar}>
+                  {(req.userId?.username || '?')[0].toUpperCase()}
+                </div>
+                <div style={styles.userMeta}>
+                  <p style={styles.username}>@{req.userId?.username || req.userId || 'Unknown'}</p>
+                  {req.message && <p style={styles.message}>"{req.message}"</p>}
+                  <span style={styles.statusBadge}>⏳ {req.status}</span>
+                </div>
               </div>
-              <div className="flex gap-2">
+              <div style={styles.actions}>
                 <button 
+                  style={{ ...styles.approveBtn, opacity: actionLoading === req._id ? 0.5 : 1 }}
                   onClick={() => handleRespond(req._id, 'approve')}
                   disabled={actionLoading === req._id}
-                  className="px-3 py-1.5 border-none bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded disabled:opacity-50"
+                  onMouseDown={e => e.currentTarget.style.transform = "scale(0.95)"}
+                  onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}
                 >
-                  {actionLoading === req._id ? "..." : "Approve"}
+                  {actionLoading === req._id ? "..." : "✓ Grant"}
                 </button>
                 <button 
+                  style={{ ...styles.rejectBtn, opacity: actionLoading === req._id ? 0.5 : 1 }}
                   onClick={() => handleRespond(req._id, 'reject')}
                   disabled={actionLoading === req._id}
-                  className="px-3 py-1.5 border-none bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded disabled:opacity-50"
+                  onMouseDown={e => e.currentTarget.style.transform = "scale(0.95)"}
+                  onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}
                 >
-                  {actionLoading === req._id ? "..." : "Reject"}
+                  {actionLoading === req._id ? "..." : "✕ Deny"}
                 </button>
               </div>
             </div>

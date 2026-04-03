@@ -2,12 +2,30 @@ const express = require("express");
 const router = express.Router();
 const multer = require("multer");
 const Project = require("../models/Project");
+const Notification = require("../models/Notification");
 const Branch = require("../models/Branch");
 const Activity = require("../models/Activity");
 const auth = require("../middleware/auth");
 const fs = require("fs");
 const path = require("path");
 const AdmZip = require("adm-zip");
+
+// Project Owner Middleware
+const checkProjectOwner = async (req, res, next) => {
+  try {
+    const project = await Project.findById(req.params.id);
+    if (!project) return res.status(404).json({ message: "Project not found" });
+    const ownerId = project.userId?._id?.toString() || project.userId?.toString();
+    if (ownerId !== req.user.id) {
+      return res.status(403).json({ message: "Forbidden: You are not the project owner" });
+    }
+    req.project = project;
+    next();
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
@@ -35,9 +53,11 @@ router.get("/", async (req, res) => {
     if (privateIds.length) query.userId = { $nin: privateIds };
 
     const projects = await Project.find(query)
-      .sort({ createdAt: -1 })
       .populate("userId", "username avatar")
-      .populate("remixedFrom", "title userId");
+      .populate("rootCreatorId", "username avatar")
+      .populate("remixedFrom", "title")
+      .sort({ createdAt: -1 })
+      .limit(50);
     res.json(projects);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -61,7 +81,8 @@ router.post("/", auth, upload.array("files", 10000), async (req, res) => {
       domain: domain || "",
       about: { features: features || "", howItWorks: howItWorks || "", futurePlans: futurePlans || "" },
       files,
-      userId: req.user.id
+      userId: req.user.id,
+      rootCreatorId: req.user.id
     });
 
     await Branch.create({
@@ -90,17 +111,16 @@ router.post("/:id/remix", auth, async (req, res) => {
     if (!original) return res.status(404).json({ message: "Project not found" });
     const isOwner = original.userId.toString() === req.user.id;
     
-    // Check if remixing is allowed:
-    // 1. If it's public, anyone can remix.
-    // 2. If it's not public, only owner or explicitly allowed users can remix.
-    const isAllowed = original.isPublicRemix || isOwner || original.allowedRemixers?.some(uId => uId.toString() === req.user.id);
+    // Only owner or explicitly approved contributors can remix
+    const isAllowed = isOwner || original.allowedRemixers?.some(uId => uId.toString() === req.user.id);
     
     if (!isAllowed) {
       return res.status(403).json({ message: "This project is private. You must request access from the creator to branch it." });
     }
 
+    const newTitle = original.title.endsWith("(Remix)") ? original.title : `${original.title} (Remix)`;
     const remixed = await Project.create({
-      title: `${original.title} (Remix)`,
+      title: newTitle,
       description: original.description,
       codeSnippet: original.codeSnippet,
       tags: original.tags,
@@ -109,7 +129,8 @@ router.post("/:id/remix", auth, async (req, res) => {
       about: original.about,
       files: original.files,
       userId: req.user.id,
-      remixedFrom: original._id
+      remixedFrom: original._id,
+      rootCreatorId: original.rootCreatorId || original.userId
     });
 
     original.remixCount = (original.remixCount || 0) + 1;
@@ -123,7 +144,7 @@ router.post("/:id/remix", auth, async (req, res) => {
       meta: original.title
     });
 
-    const populated = await remixed.populate("userId", "username avatar");
+    const populated = await remixed.populate("userId rootCreatorId", "username avatar");
     res.json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -147,8 +168,7 @@ router.post("/:id/pull", auth, async (req, res) => {
       return res.status(404).json({ message: "Original project no longer exists." });
 
     // Security check: Make sure user is either the owner, an allowed remixer, or the project is public
-    const isOwner = original.userId.toString() === req.user.id;
-    const isAllowed = original.isPublicRemix || isOwner || original.allowedRemixers?.some(uId => uId.toString() === req.user.id);
+    const isAllowed = isOwner || original.allowedRemixers?.some(uId => uId.toString() === req.user.id);
     
     if (!isAllowed) {
       return res.status(403).json({ message: "This project is private and you don't have access to pull updates." });
@@ -326,6 +346,26 @@ router.post("/:id/sync-request", auth, async (req, res) => {
       meta:      original.title
     });
 
+    // Notify admin (project owner) about incoming sync request
+    const User = require("../models/User");
+    const contributor = await User.findById(req.user.id);
+    const msg = `@${contributor?.username || 'A contributor'} submitted a sync request for "${original.title}"`;
+    
+    await Notification.create({
+      userId: original.userId,
+      projectId: original._id,
+      message: msg,
+      type: "sync-request"
+    });
+
+    if (!Array.isArray(original.notifications)) original.notifications = [];
+    original.notifications.push({
+      userId: original.userId,
+      message: msg,
+      type: "sync-request"
+    });
+    await original.save();
+
     res.json({ message: "Sync request sent to the original creator" });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -333,17 +373,12 @@ router.post("/:id/sync-request", auth, async (req, res) => {
 });
 
 // GET /projects/:id/sync-requests — original creator views pending requests
-router.get("/:id/sync-requests", auth, async (req, res) => {
+router.get("/:id/sync-requests", auth, checkProjectOwner, async (req, res) => {
   try {
-    const project = await Project.findById(req.params.id)
-      .populate("syncRequests.remixId", "title userId updatedAt description codeSnippet about tags domain")
+    const project = await req.project
+      .populate("syncRequests.remixId", "title userId updatedAt description codeSnippet about tags domain files")
       .populate("syncRequests.requestedBy", "username avatar");
-    if (!project) return res.status(404).json({ message: "Not found" });
-
-    const ownerId = project.userId?._id?.toString() || project.userId?.toString();
-    if (ownerId !== req.user.id)
-      return res.status(403).json({ message: "Not authorized" });
-
+    
     const pending = (project.syncRequests || []).filter(r => r.status === "pending");
     res.json(pending);
   } catch (err) {
@@ -352,18 +387,13 @@ router.get("/:id/sync-requests", auth, async (req, res) => {
 });
 
 // POST /projects/:id/sync-request/:reqId/respond — approve copies remix changes INTO original
-router.post("/:id/sync-request/:reqId/respond", auth, async (req, res) => {
+router.post("/:id/sync-request/:reqId/respond", auth, checkProjectOwner, async (req, res) => {
   try {
     const { action } = req.body;
     if (!["approve", "decline"].includes(action))
       return res.status(400).json({ message: "action must be approve or decline" });
 
-    const original = await Project.findById(req.params.id);
-    if (!original) return res.status(404).json({ message: "Not found" });
-
-    const ownerId = original.userId?._id?.toString() || original.userId?.toString();
-    if (ownerId !== req.user.id)
-      return res.status(403).json({ message: "Not authorized" });
+    const original = req.project;
 
     const syncReq = original.syncRequests?.id(req.params.reqId);
     if (!syncReq) return res.status(404).json({ message: "Sync request not found" });
@@ -426,6 +456,29 @@ router.post("/:id/sync-request/:reqId/respond", auth, async (req, res) => {
     }
 
     await original.save();
+
+    // Notify contributor about admin's sync decision
+    await Notification.create({
+      userId: syncReq.requestedBy,
+      projectId: original._id,
+      message: action === "approve"
+        ? `Your sync request for "${original.title}" has been approved and merged!`
+        : `Your sync request for "${original.title}" has been declined.`,
+      type: action === "approve" ? "sync-approved" : "sync-rejected"
+    });
+
+    const decisionMsg = action === "approve"
+      ? `You approved and merged a sync request for "${original.title}"`
+      : `You declined a sync request for "${original.title}"`;
+
+    if (!Array.isArray(original.notifications)) original.notifications = [];
+    original.notifications.push({
+      userId: original.userId,
+      message: decisionMsg,
+      type: action === "approve" ? "sync-approved" : "sync-rejected"
+    });
+
+    await original.save();
     res.json({ message: action === "approve" ? "Sync approved — original project updated with remix changes" : "Sync declined" });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -458,6 +511,27 @@ router.post("/:id/remix-request", auth, async (req, res) => {
     console.log("User:", req.user.id);
 
     await project.save();
+
+    // Notify admin (project owner)
+    const User = require("../models/User");
+    const requester = await User.findById(req.user.id);
+    const msg = `@${requester?.username || 'Someone'} requested remix access to "${project.title}"`;
+    
+    await Notification.create({
+      userId: project.userId,
+      projectId: project._id,
+      message: msg,
+      type: "remix-request"
+    });
+
+    if (!Array.isArray(project.notifications)) project.notifications = [];
+    project.notifications.push({
+      userId: project.userId,
+      message: msg,
+      type: "remix-request"
+    });
+    await project.save();
+
     res.json({ message: "Remix request sent" });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -465,15 +539,9 @@ router.post("/:id/remix-request", auth, async (req, res) => {
 });
 
 // GET /projects/:id/remix-requests
-router.get("/:id/remix-requests", auth, async (req, res) => {
+router.get("/:id/remix-requests", auth, checkProjectOwner, async (req, res) => {
   try {
-    const project = await Project.findById(req.params.id)
-      .populate("remixRequests.userId", "username avatar");
-    if (!project) return res.status(404).json({ message: "Not found" });
-
-    if (project.userId.toString() !== req.user.id)
-      return res.status(403).json({ message: "Not authorized" });
-
+    const project = await req.project.populate("remixRequests.userId", "username avatar");
     const pending = (project.remixRequests || []).filter(r => r.status === "pending");
     res.json(pending);
   } catch (err) {
@@ -482,17 +550,13 @@ router.get("/:id/remix-requests", auth, async (req, res) => {
 });
 
 // POST /projects/:id/respond-remix
-router.post("/:id/respond-remix", auth, async (req, res) => {
+router.post("/:id/respond-remix", auth, checkProjectOwner, async (req, res) => {
   try {
     const { requestId, action } = req.body;
     if (!["approve", "reject"].includes(action))
       return res.status(400).json({ message: "Invalid action" });
 
-    const project = await Project.findById(req.params.id);
-    if (!project) return res.status(404).json({ message: "Not found" });
-
-    if (project.userId.toString() !== req.user.id)
-      return res.status(403).json({ message: "Not authorized" });
+    const project = req.project;
 
     const reqItem = project.remixRequests?.id(requestId);
     if (!reqItem || reqItem.status !== "pending")
@@ -507,115 +571,30 @@ router.post("/:id/respond-remix", auth, async (req, res) => {
       }
     }
 
-    await project.save();
-    res.json({ message: `Request ${action}d successfully` });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// POST /projects/:id/req-access
-router.post("/:id/req-access", auth, async (req, res) => {
-  try {
-    const project = await Project.findById(req.params.id);
-    if (!project) return res.status(404).json({ message: "Not found" });
-    
-    if (project.userId.toString() === req.user.id)
-      return res.status(400).json({ message: "You are the owner" });
-
-    // Check if already allowed
-    if (project.allowedRemixers?.some(uid => uid.toString() === req.user.id))
-      return res.status(400).json({ message: "You already have access" });
-
-    // Check if pending request exists
-    const hasPending = project.remixAccessRequests?.some(r => r.userId.toString() === req.user.id && r.status === "pending");
-    if (hasPending)
-      return res.status(400).json({ message: "Request already pending" });
-
-    if (!Array.isArray(project.remixAccessRequests)) project.remixAccessRequests = [];
-    project.remixAccessRequests.push({ userId: req.user.id });
-    
-    await project.save();
-    
-    // Create activity for the owner
-    const Activity = require("../models/Activity");
-    await Activity.create({
-      userId: req.user.id,
-      type: "remix_requested",
+    // Notify contributor about admin's decision
+    await Notification.create({
+      userId: reqItem.userId,
       projectId: project._id,
-      targetId: project.userId,
-      meta: project.title
+      message: action === "approve"
+        ? `Your remix request for "${project.title}" has been approved! You can now create a branch.`
+        : `Your remix request for "${project.title}" has been rejected.`,
+      type: action === "approve" ? "remix-approved" : "remix-rejected"
     });
 
-    // Populate and return updated requests so UI can update correctly
-    await project.populate("remixAccessRequests.userId", "username avatar");
-    res.json({ message: "Access requested successfully", remixAccessRequests: project.remixAccessRequests });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
+    const decisionMsg = action === "approve"
+      ? `You approved a remix request for "${project.title}"`
+      : `You rejected a remix request for "${project.title}"`;
 
-// POST /projects/:id/req-access/:reqId/respond
-router.post("/:id/req-access/:reqId/respond", auth, async (req, res) => {
-  try {
-    const { action } = req.body; // "approve" or "decline"
-    const project = await Project.findById(req.params.id);
-    if (!project) return res.status(404).json({ message: "Not found" });
-
-    if (project.userId.toString() !== req.user.id)
-      return res.status(403).json({ message: "Not authorized" });
-
-    const reqItem = project.remixAccessRequests?.id(req.params.reqId);
-    if (!reqItem || reqItem.status !== "pending")
-      return res.status(400).json({ message: "Invalid or already handled request" });
-
-    reqItem.status = action === "approve" ? "approved" : "declined";
-
-    if (action === "approve") {
-      if (!Array.isArray(project.allowedRemixers)) project.allowedRemixers = [];
-      if (!project.allowedRemixers.includes(reqItem.userId)) {
-        project.allowedRemixers.push(reqItem.userId);
-      }
-
-      // Automatically create a Remix sandbox / Workspace
-      const User = require("../models/User");
-      const user = await User.findById(reqItem.userId);
-      const generatedBranchName = `${user ? user.username : 'user'}_feature`;
-
-      const remixed = await Project.create({
-        title: `${project.title} (Remix)`,
-        description: project.description,
-        codeSnippet: project.codeSnippet,
-        tags: project.tags,
-        domain: project.domain,
-        status: "in-progress",
-        about: project.about,
-        files: project.files,
-        userId: reqItem.userId,
-        remixedFrom: project._id
-      });
-      project.remixCount = (project.remixCount || 0) + 1;
-
-      // Automatically generate branch linking them
-      await Branch.create({
-        branchName: generatedBranchName,
-        sourceProjectId: project._id,
-        remixProjectId: remixed._id,
-        branchOwner: reqItem.userId,
-        visibility: "private",
-        status: "active"
-      });
-    }
+    if (!Array.isArray(project.notifications)) project.notifications = [];
+    project.notifications.push({
+      userId: project.userId,
+      message: decisionMsg,
+      type: action === "approve" ? "remix-approved" : "remix-rejected"
+    });
 
     await project.save();
-    await project.populate("remixAccessRequests.userId", "username avatar");
-    await project.populate("allowedRemixers", "username avatar");
-    
-    res.json({
-      message: action === "approve" ? "Access granted" : "Access declined",
-      remixAccessRequests: project.remixAccessRequests,
-      allowedRemixers: project.allowedRemixers
-    });
+
+    res.json({ message: `Request ${action}d successfully` });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -763,6 +742,7 @@ router.get("/:id", async (req, res) => {
   try {
     const project = await Project.findById(req.params.id)
       .populate("userId", "username avatar followers")
+      .populate("rootCreatorId", "username avatar")
       .populate("comments.userId", "username avatar")
       .populate("remixedFrom", "title userId")
       .populate("syncHistory.contributorId", "username avatar")
@@ -842,4 +822,18 @@ router.delete("/:id", auth, async (req, res) => {
   }
 });
 
+// GET /projects/:id/notifications — Fetch notifications for the admin regarding a specific project
+router.get("/:id/notifications", auth, checkProjectOwner, async (req, res) => {
+  try {
+    const project = req.project;
+    const notifications = (project.notifications || [])
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 20);
+    res.json(notifications);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;
+
