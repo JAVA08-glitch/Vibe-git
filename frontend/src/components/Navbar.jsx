@@ -156,6 +156,7 @@ export default function Navbar({ setChatOpen }) {
         <Link to="/" className={isActive("/")}>Explore</Link>
         <Link to="/feed" className={isActive("/feed")}>Feed</Link>
         <Link to="/activity" className={isActive("/activity")}>Activity</Link>
+        {user && <Link to="/dashboard" className={isActive("/dashboard")}>Dashboard</Link>}
         
         {user && (
           <div className="nav-notif-wrapper" style={{ position: "relative" }}>

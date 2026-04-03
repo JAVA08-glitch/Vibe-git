@@ -11,6 +11,9 @@ export default function Explore() {
   const [projects, setProjects] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [sort, setSort] = useState("latest");
   
   const location = useLocation();
   const navigate = useNavigate();
@@ -20,27 +23,44 @@ export default function Explore() {
   const tag = params.get("tag") || "";
 
   useEffect(() => {
-    fetchData();
-  }, [search, tag, activeTab]);
+    setPage(1);
+    setProjects([]);
+  }, [search, tag, sort, activeTab]);
 
-  const fetchData = async () => {
-    setLoading(true);
+  useEffect(() => {
+    fetchData(page === 1);
+  }, [search, tag, sort, activeTab, page]);
+
+  const fetchData = async (reset = false) => {
+    if (reset) setLoading(true);
     try {
       if (activeTab === "projects") {
         const query = new URLSearchParams();
         if (search) query.set("search", search);
         if (tag) query.set("tag", tag);
+        query.set("sort", sort);
+        query.set("page", page);
+        query.set("limit", 20);
         query.set("explore", "true"); // Filter for admin-owned projects
         const res = await api.get(`/projects?${query.toString()}`);
-        setProjects(res.data);
+        if (reset) {
+          setProjects(res.data);
+        } else {
+          setProjects(prev => {
+            const newProjects = res.data.filter(p => !prev.some(existing => existing._id === p._id));
+            return [...prev, ...newProjects];
+          });
+        }
+        setHasMore(res.data.length === 20);
       } else {
         const res = await api.get("/users");
         setProfiles(res.data);
+        setHasMore(false);
       }
     } catch (err) {
       console.error("Failed to fetch explore data:", err);
     } finally {
-      setLoading(false);
+      if (reset) setLoading(false);
     }
   };
 
@@ -105,17 +125,30 @@ export default function Explore() {
         </div>
       </div>
 
-      {/* Tag Bar */}
-      <div className="ex-tag-bar">
-        {TAGS.map(t => (
-          <button
-            key={t}
-            className={`ex-tag-btn ${tag === t ? "active" : ""}`}
-            onClick={() => setTag(t)}
-          >
-            #{t}
-          </button>
-        ))}
+      {/* Tag Bar and Sort options */}
+      <div className="ex-filters-row">
+        <div className="ex-tag-bar">
+          {TAGS.map(t => (
+            <button
+              key={t}
+              className={`ex-tag-btn ${tag === t ? "active" : ""}`}
+              onClick={() => setTag(t)}
+            >
+              #{t}
+            </button>
+          ))}
+        </div>
+        
+        {activeTab === "projects" && (
+          <div className="ex-sort-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 14, height: 14 }}><path d="M3 6h18M6 12h12m-9 6h6"/></svg>
+            <select className="ex-sort-select" value={sort} onChange={e => setSort(e.target.value)}>
+              <option value="latest">Latest</option>
+              <option value="trending">Trending</option>
+              <option value="mostLiked">Most Liked</option>
+            </select>
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -139,11 +172,20 @@ export default function Explore() {
                 <button className="ex-empty-cta" onClick={() => navigate("/create")}>Create Project</button>
               </div>
             ) : (
-              <div className="ex-proj-grid">
-                {projects.map(p => (
-                  <ProjectCardSmall key={p._id} project={p} onLike={(e) => handleLike(e, p._id)} />
-                ))}
-              </div>
+              <>
+                <div className="ex-proj-grid masonry-grid">
+                  {projects.map(p => (
+                    <ProjectCard key={p._id} project={p} onLike={(e) => handleLike(e, p._id)} />
+                  ))}
+                </div>
+                {hasMore && projects.length > 0 && (
+                  <div className="ex-load-more">
+                    <button className="ex-load-more-btn glass-btn" onClick={() => setPage(p => p + 1)}>
+                      Load More Projects
+                    </button>
+                  </div>
+                )}
+              </>
             )
           ) : (
             profiles.length === 0 ? (
@@ -165,55 +207,66 @@ export default function Explore() {
   );
 }
 
-function ProjectCardSmall({ project, onLike }) {
+const getGradient = (id) => {
+  const hash = (id || "fallback").split("").reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a }, 0);
+  const hue1 = Math.abs(hash % 360);
+  const hue2 = (hue1 + 40) % 360;
+  return `linear-gradient(135deg, hsl(${hue1}, 80%, 15%), hsl(${hue2}, 80%, 25%))`;
+};
+
+function ProjectCard({ project, onLike }) {
   const navigate = useNavigate();
   const liked = project.liked;
 
   return (
-    <div className="ex-proj-card" onClick={() => navigate(`/projects/${project._id}`)}>
-      <div className="ex-proj-accent-bar" style={{ background: "var(--accent)" }} />
-      
-      <div className="ex-proj-header">
-        <Link to={`/profile/${project.userId?._id}`} className="ex-proj-author" onClick={e => e.stopPropagation()}>
-          <Avatar user={project.userId} size={20} />
-          <span className="ex-proj-username">@{project.userId?.username}</span>
-        </Link>
-        <span className={`ex-proj-status-badge status-${project.status}`}>
-          {project.status === "completed" ? "✅" : project.status === "in-progress" ? "🚧" : "💡"} {project.status}
-        </span>
-      </div>
-
-      <h3 className="ex-proj-title">{project.title}</h3>
-      <p className="ex-proj-desc">{project.description}</p>
-
-      <div className="ex-proj-tags">
-        {project.tags?.slice(0, 3).map(t => (
-          <span key={t} className="ex-proj-tag">#{t}</span>
-        ))}
-      </div>
-
-      <div className="ex-proj-footer">
-        <button className={`ex-like-btn ${liked ? "liked" : ""}`} onClick={onLike}>
-          <svg viewBox="0 0 24 24" fill={liked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2.5" style={{ width: 13, height: 13 }}>
-            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-          </svg>
-          {project.likes?.length || 0}
-        </button>
-        <div className="ex-proj-meta">
-          <span className="ex-remix-count">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 11, height: 11 }}>
-              <line x1="6" y1="3" x2="6" y2="15" />
-              <circle cx="18" cy="6" r="3" />
-              <circle cx="6" cy="18" r="3" />
-              <path d="M18 9a9 9 0 0 1-9 9" />
-            </svg>
-            {project.remixCount || 0}
-          </span>
-          <span className="ex-proj-date">{new Date(project.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+    <div className="ex-proj-card glass-card" onClick={() => navigate(`/projects/${project._id}`)}>
+      <div className="ex-proj-preview" style={{ background: getGradient(project._id) }}>
+        <img 
+          src={`https://picsum.photos/seed/${project._id}/400/200`} 
+          alt="Preview" 
+          loading="lazy"
+          className="ex-proj-preview-img"
+          onError={(e) => e.target.style.display = 'none'}
+        />
+        <div className="ex-proj-preview-overlay">
+          <button className="ex-proj-hover-btn" onClick={(e) => { e.stopPropagation(); navigate(`/projects/${project._id}`); }}>
+            View Details
+          </button>
         </div>
       </div>
       
-      <div className="ex-proj-hover-cta">View Details →</div>
+      <div className="ex-proj-content">
+        <div className="ex-proj-header">
+          <h3 className="ex-proj-title">{project.title}</h3>
+          <span className={`ex-proj-status-badge status-${project.status}`}>
+            {project.status === "completed" ? "✅" : project.status === "in-progress" ? "🚧" : "💡"}
+          </span>
+        </div>
+        
+        <p className="ex-proj-desc">{project.description}</p>
+        
+        <div className="ex-proj-tags">
+          {project.tags?.slice(0, 3).map(t => (
+            <span key={t} className="ex-proj-tag-chip">#{t}</span>
+          ))}
+        </div>
+      </div>
+      
+      <div className="ex-proj-footer-custom">
+        <Link to={`/profile/${project.userId?._id}`} className="ex-proj-author" onClick={e => e.stopPropagation()}>
+          <Avatar user={project.userId} size={24} />
+          <span className="ex-proj-username">@{project.userId?.username}</span>
+        </Link>
+        
+        <div className="ex-proj-actions">
+          <button className={`ex-like-btn ${liked ? "liked" : ""}`} onClick={onLike}>
+            <svg viewBox="0 0 24 24" fill={liked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2.5" style={{ width: 14, height: 14 }}>
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+            {project.likes?.length || 0}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

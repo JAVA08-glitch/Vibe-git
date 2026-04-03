@@ -95,6 +95,14 @@ export default function SyncRequests() {
                 <div className="sync-actions">
                   <button
                     className="sync-approve-btn"
+                    style={{ background: "#a78bfa", color: "#000", border: "none" }}
+                    disabled={responding === req._id}
+                    onClick={() => { window.location.href = `/projects/${remix?._id}/ide?inspect=true&reqId=${req._id}`; }}
+                  >
+                    🔍 Inspect Code
+                  </button>
+                  <button
+                    className="sync-approve-btn"
                     disabled={responding === req._id}
                     onClick={() => handleRespond(req._id, "approve")}
                   >

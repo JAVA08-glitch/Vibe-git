@@ -12,3 +12,7 @@ export const respondToRemixRequest = (projectId, requestId, action) => {
   return api.post(`/projects/${projectId}/respond-remix`, { requestId, action });
 };
 
+export const withdrawRemixRequest = (projectId) => {
+  return api.delete(`/projects/${projectId}/remix-request`);
+};
+

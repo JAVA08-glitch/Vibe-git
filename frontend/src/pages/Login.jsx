@@ -208,6 +208,8 @@ export default function Login() {
             <div className="input-group">
               <input
                 type="email"
+                name="email"
+                autoComplete="email username"
                 placeholder="email"
                 value={form.email}
                 onChange={e => setForm({ ...form, email: e.target.value })}
@@ -217,6 +219,8 @@ export default function Login() {
             <div className="input-group">
               <input
                 type={showPassword ? "text" : "password"}
+                name="password"
+                autoComplete="current-password"
                 placeholder="password"
                 value={form.password}
                 onChange={e => setForm({ ...form, password: e.target.value })}

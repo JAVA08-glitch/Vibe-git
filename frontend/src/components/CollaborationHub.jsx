@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import "./CollaborationHub.css";
 
-const CollaborationHub = ({ project, user, onPull, onPush, isOwner, syncSending, syncRequestSent }) => {
+const CollaborationHub = ({ project, user, onPull, onPush, isOwner, isContributor, syncSending, syncRequestSent }) => {
   const [terminalOutput, setTerminalOutput] = useState([
     "✔ Connected to upstream",
     "Ready for secure collaboration operations."
@@ -10,6 +10,7 @@ const CollaborationHub = ({ project, user, onPull, onPush, isOwner, syncSending,
   const [pendingAction, setPendingAction] = useState(null);
   
   const isRemix = !!project.remixedFrom;
+  const targetProjectId = project.userRemixId || project._id;
 
   const addOutput = (line) => {
     setTerminalOutput((prev) => [...prev.slice(-4), `> ${line}`]);
@@ -49,8 +50,6 @@ const CollaborationHub = ({ project, user, onPull, onPush, isOwner, syncSending,
 
   const canShowActionHub = (isOwner && isRemix) || (isContributor && project.userRemixId);
   if (!canShowActionHub) return null;
-  
-  const targetProjectId = project.userRemixId || project._id;
 
   return (
     <div className="collab-hub-container" style={{ marginTop: "24px" }}>

@@ -52,7 +52,7 @@ const upload = multer({ storage, limits: { fileSize: 20 * 1024 * 1024 } }); // 2
 // GET /projects
 router.get("/", async (req, res) => {
   try {
-    const { search, tag, status, domain } = req.query;
+    const { search, tag, status, domain, sort, page = 1, limit = 20 } = req.query;
     const query = {};
     if (search) query.$or = [
       { title: { $regex: search, $options: "i" } },
@@ -74,13 +74,44 @@ router.get("/", async (req, res) => {
     const privateIds = privateUsers.map(u => u._id);
     if (privateIds.length) query.userId = { $nin: privateIds };
 
-    const projects = await Project.find(query)
+    let sortOption = { createdAt: -1 }; // default: latest
+    if (sort === "mostLiked") {
+      // Sorting by array length in MongoDB standard find is not directly supported without aggregation.
+      // Alternatively, we can aggregate if strictly needed, or we might add a `likesCount` field in the future.
+      // Since it's quick, we fetch all and sort in memory if needed, OR we use an aggregation.
+      // For now, let's just do a basic fetch and sort in memory using `.lean()` if doing `mostLiked/trending`
+      // Wait, let's keep it robust for the future.
+    }
+
+    // We'll perform the query and standard sort.
+    let projects = await Project.find(query)
       .populate("userId", "username avatar")
       .populate("rootCreatorId", "username avatar")
       .populate("remixedFrom", "title")
-      .sort({ createdAt: -1 })
-      .limit(50);
-    res.json(projects);
+      .lean();
+
+    // In-memory sorting for complex scores since we don't have `likesCount` as a direct field
+    if (sort === "mostLiked") {
+      projects.sort((a, b) => (b.likes?.length || 0) - (a.likes?.length || 0));
+    } else if (sort === "trending") {
+      // Trending = likes * 2 + remixes
+      projects.sort((a, b) => {
+        const scoreA = (a.likes?.length || 0) * 2 + (a.remixCount || 0);
+        const scoreB = (b.likes?.length || 0) * 2 + (b.remixCount || 0);
+        return scoreB - scoreA;
+      });
+    } else {
+      // Latest
+      projects.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    }
+
+    // Pagination
+    const startIndex = (parseInt(page) - 1) * parseInt(limit);
+    const endIndex = startIndex + parseInt(limit);
+    
+    const paginatedProjects = projects.slice(startIndex, endIndex);
+
+    res.json(paginatedProjects);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
