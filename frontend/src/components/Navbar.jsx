@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import Avatar from "./Avatar";
+import PullSwitch from "./PullSwitch";
 import "./Navbar.css";
 
 const ACCENTS = ["#a78bfa", "#f472b6", "#34d399", "#60a5fa", "#fb923c", "#facc15"];
@@ -244,62 +245,7 @@ export default function Navbar({ setChatOpen }) {
         ) : (
           <Link to="/login" className="nav-create-btn">Sign in</Link>
         )}
-
-        <div className="prefs-wrapper">
-          <button
-            className="nav-btn"
-            onClick={() => setShowPrefs(p => !p)}
-            title="Preferences"
-            style={{ fontSize: "1rem", padding: "0.35rem 0.5rem" }}
-          >
-            ⚙️
-          </button>
-          {showPrefs && (
-            <div className="prefs-panel">
-              <div className="prefs-row">
-                <span>Accent</span>
-                <div className="accent-swatches">
-                  {ACCENTS.map(c => (
-                    <button
-                      key={c}
-                      className={`swatch ${accent === c ? "active" : ""}`}
-                      style={{ background: c }}
-                      onClick={() => setAccent(c)}
-                    />
-                  ))}
-                  <input
-                    type="color"
-                    value={accent}
-                    onChange={e => setAccent(e.target.value)}
-                    className="color-input"
-                    title="Custom color"
-                  />
-                </div>
-              </div>
-              <div className="prefs-row">
-                <span>Font</span>
-                <div className="font-btns">
-                  {FONTS.map(f => (
-                    <button
-                      key={f.key}
-                      className={`nav-btn ${font === f.key ? "active-pref" : ""}`}
-                      onClick={() => setFont(f.key)}
-                    >
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="prefs-row">
-                <span>Layout</span>
-                <div className="font-btns">
-                  <button className={`nav-btn ${layout === "grid" ? "active-pref" : ""}`} onClick={() => setLayout("grid")}>⊞ Grid</button>
-                  <button className={`nav-btn ${layout === "list" ? "active-pref" : ""}`} onClick={() => setLayout("list")}>☰ List</button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        <PullSwitch inline />
       </div>
     </nav>
   );

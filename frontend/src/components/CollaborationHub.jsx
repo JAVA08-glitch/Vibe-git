@@ -48,7 +48,7 @@ const CollaborationHub = ({ project, user, onPull, onPush, isOwner, isContributo
     }
   };
 
-  const canShowActionHub = (isOwner && isRemix) || (isContributor && project.userRemixId);
+  const canShowActionHub = (isOwner && isRemix) || (!isOwner && project.userRemixId);
   if (!canShowActionHub) return null;
 
   return (
