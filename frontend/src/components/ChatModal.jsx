@@ -16,13 +16,17 @@ export default function ChatModal({ onClose, initialUserId, initialUser }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [conversations, setConversations] = useState([]);
-  const [activeChat, setActiveChat] = useState(null); // { _id, username, avatar }
+  const [activeChat, setActiveChat] = useState(null);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
+  const [search, setSearch] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
   const bottomRef = useRef(null);
+  const searchRef = useRef(null);
 
   // Load conversations
   useEffect(() => {
@@ -46,13 +50,27 @@ export default function ChatModal({ onClose, initialUserId, initialUser }) {
 
   const openChat = async (partner) => {
     setActiveChat(partner);
+    setSearch("");
+    setSearchResults([]);
     try {
       const res = await api.get(`/messages/${partner._id}`);
       setMessages(res.data);
-      // Notify navbar to update unread count immediately
       window.dispatchEvent(new CustomEvent("vibe:unread-update"));
     } catch {}
   };
+
+  // Search users by username
+  useEffect(() => {
+    if (!search.trim()) { setSearchResults([]); return; }
+    const timer = setTimeout(() => {
+      setSearching(true);
+      api.get(`/users/search?q=${encodeURIComponent(search.trim())}`)
+        .then(res => setSearchResults(res.data.users || []))
+        .catch(() => {})
+        .finally(() => setSearching(false));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -104,13 +122,45 @@ export default function ChatModal({ onClose, initialUserId, initialUser }) {
             </span>
             <button className="chat-close-btn" onClick={onClose}>✕</button>
           </div>
-          {loading ? (
+
+          {/* Search bar */}
+          <div className="chat-search-wrap">
+            <input
+              ref={searchRef}
+              className="chat-search-input"
+              placeholder="Search users to message..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+
+          {/* Search results */}
+          {search.trim() ? (
+            <div className="chat-convo-list">
+              {searching && <p className="chat-empty-faint">Searching...</p>}
+              {!searching && searchResults.length === 0 && (
+                <p className="chat-empty-faint">No users found for "{search}"</p>
+              )}
+              {searchResults
+                .filter(s => s._id !== user.id)
+                .map(s => (
+                  <div key={s._id} className="chat-convo-item" onClick={() => openChat(s)}>
+                    <Avatar user={s} size={36} />
+                    <div className="chat-convo-info">
+                      <span className="chat-convo-name">@{s.username}</span>
+                      <span className="chat-convo-sub">Click to message</span>
+                    </div>
+                  </div>
+                ))
+              }
+            </div>
+          ) : loading ? (
             <p className="chat-empty">Loading...</p>
           ) : conversations.length === 0 ? (
             <div className="chat-suggestions-sidebar">
               <p className="chat-sidebar-sub">Suggested Users</p>
               {suggestions.length === 0 ? (
-                <p className="chat-empty-faint">No suggestions yet. Explore projects!</p>
+                <p className="chat-empty-faint">Search for a user above to start chatting!</p>
               ) : (
                 <div className="chat-convo-list">
                   {suggestions.map(s => (
@@ -136,7 +186,9 @@ export default function ChatModal({ onClose, initialUserId, initialUser }) {
                   onClick={() => openChat(partner)}
                 >
                   <Avatar user={partner} size={36} />
-                  <span className="chat-convo-name">@{partner.username}</span>
+                  <div className="chat-convo-info">
+                    <span className="chat-convo-name">@{partner.username}</span>
+                  </div>
                 </div>
               ))}
             </div>

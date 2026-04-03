@@ -279,6 +279,9 @@ function ProjectCard({ project, onLike }) {
           </button>
         </div>
       </div>
+      
+      <div className="ex-proj-hover-cta" style={{ display: "none" }} />
+
     </div>
   );
 }

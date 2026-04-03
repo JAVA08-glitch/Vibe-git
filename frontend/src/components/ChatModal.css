@@ -276,7 +276,39 @@
   text-align: center;
 }
 
-/* ── Avatar Fallback ── */
+.chat-no-msgs {
+  text-align: center;
+  color: rgba(255,255,255,0.3);
+  font-size: 0.85rem;
+  margin-top: 2rem;
+}
+
+/* ── Search bar ── */
+.chat-search-wrap {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.chat-search-input {
+  width: 100%;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 0.5rem 0.85rem;
+  color: #fff;
+  font-size: 0.83rem;
+  outline: none;
+  transition: border-color 0.2s;
+  font-family: var(--font);
+}
+
+.chat-search-input::placeholder { color: rgba(255,255,255,0.3); }
+.chat-search-input:focus { border-color: var(--accent, #6366f1); }
+
+.chat-convo-sub {
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.35);
+}
 .chat-avatar-placeholder {
   background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
   border: 1px solid rgba(255,255,255,0.1);

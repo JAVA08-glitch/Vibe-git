@@ -1,3 +1,5 @@
+@import url('https://api.fontshare.com/v2/css?f[]=satoshi@700,800&display=swap');
+
 .explore-page {
   max-width: 1080px;
   margin: 0 auto;
@@ -17,12 +19,13 @@
 }
 
 .ex-hero-title {
-  font-size: 2rem;
+  font-family: 'Satoshi', sans-serif;
+  font-size: 2.6rem;
   font-weight: 800;
   color: var(--text);
-  letter-spacing: -0.03em;
+  letter-spacing: -0.04em;
   margin: 0 0 0.3rem;
-  line-height: 1.15;
+  line-height: 1.1;
 }
 
 [data-theme="dark"] .ex-hero-title {
@@ -31,10 +34,12 @@
 
 .ex-hero-title em {
   font-style: normal;
+  font-weight: 800;
   background: linear-gradient(90deg, var(--accent), var(--like));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  letter-spacing: -0.05em;
 }
 
 .ex-hero-sub {
@@ -168,25 +173,27 @@
 /* ── Project Grid ── */
 .ex-proj-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1.25rem;
-  align-items: start;
+
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+
 }
 
 /* ── Project Card (Glassmorphism & New Layout) ── */
 .ex-proj-card.glass-card {
   position: relative;
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
+
+  background: var(--bg-card);
+  border: none;
+  border-radius: 0;
+  padding: 1.1rem 1.15rem 1rem;
+
   display: flex;
   flex-direction: column;
   cursor: pointer;
   overflow: hidden;
-  transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.25s, border-color 0.2s;
-  padding: 0; /* Remove old padding */
+  transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.22s;
+
 }
 
 /* Ensure neat dark-mode integration if --bg-card isn't perfectly transparent */
@@ -372,7 +379,7 @@ html[data-theme='light'] .ex-proj-footer-custom {
   align-items: center;
   gap: 0.35rem;
   background: none;
-  border: 1px solid var(--border-soft);
+  border: none;
   color: var(--text-faint);
   padding: 0.28rem 0.65rem;
   border-radius: 6px;

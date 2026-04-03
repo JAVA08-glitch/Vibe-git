@@ -130,8 +130,16 @@ export default function Login() {
           <div className="hero-badge">for vibe coders</div>
 
           <h1 className="hero-title">
-            <span className="hero-title-vibe">Vibe</span>
-            <span className="hero-title-git">Git</span>
+            <span className="hero-title-vibe">
+              {"Vibe".split("").map((l, i) => (
+                <span key={i} className="hero-letter">{l}</span>
+              ))}
+            </span>
+            <span className="hero-title-git">
+              {"Git".split("").map((l, i) => (
+                <span key={i} className="hero-letter">{l}</span>
+              ))}
+            </span>
           </h1>
 
           <p className="hero-tagline">
