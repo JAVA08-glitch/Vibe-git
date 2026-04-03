@@ -47,7 +47,7 @@ const CollaborationHub = ({ project, user, onPull, onPush, isOwner, syncSending,
     }
   };
 
-  const canShowActionHub = (isOwner && isRemix) || (isContributor && project.userRemixId);
+  const canShowActionHub = (isOwner && isRemix) || (!isOwner && project.userRemixId);
   if (!canShowActionHub) return null;
   
   const targetProjectId = project.userRemixId || project._id;

@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import Navbar from "./components/Navbar";
 import ChatModal from "./components/ChatModal";
-import PullSwitch from "./components/PullSwitch";
+import NightSky from "./components/NightSky";
 import Explore from "./pages/Explore";
 import Feed from "./pages/Feed";
 import Create from "./pages/Create";
@@ -17,6 +17,12 @@ import EditProject from "./pages/EditProject";
 import SyncRequests from "./pages/SyncRequests";
 import Search from "./pages/Search";
 import ProjectIDE from "./pages/ProjectIDE";
+
+function NightSkyGlobal() {
+  const location = useLocation();
+  if (location.pathname === "/login") return null;
+  return <NightSky />;
+}
 
 function AppInner() {
   const { user } = useAuth();
@@ -35,8 +41,8 @@ function AppInner() {
 
   return (
     <BrowserRouter>
+      <NightSkyGlobal />
       <Navbar setChatOpen={setChatOpen} />
-      <PullSwitch />
       <Routes>
         <Route path="/" element={<Explore />} />
         <Route path="/feed" element={<Feed />} />
