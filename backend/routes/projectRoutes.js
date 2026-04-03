@@ -62,12 +62,6 @@ router.get("/", async (req, res) => {
     if (status) query.status = status;
     if (domain) query.domain = domain;
 
-    // Explore filter: only show admin-owned projects (original projects from admins)
-    const { explore } = req.query;
-    if (explore === "true") {
-      query.ownerRole = "admin";
-    }
-
     // Exclude projects from private users
     const User = require("../models/User");
     const privateUsers = await User.find({ isPrivate: true }).select("_id");

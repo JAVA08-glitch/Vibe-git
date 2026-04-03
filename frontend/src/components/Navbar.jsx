@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import Avatar from "./Avatar";
 import PullSwitch from "./PullSwitch";
+import OceanTap from "./OceanTap";
 import "./Navbar.css";
 
 const ACCENTS = ["#a78bfa", "#f472b6", "#34d399", "#60a5fa", "#fb923c", "#facc15"];
@@ -15,7 +16,7 @@ const FONTS = [
 
 export default function Navbar({ setChatOpen }) {
   const { user, logout } = useAuth();
-  const { theme, toggle, accent, setAccent, font, setFont, layout, setLayout } = useTheme();
+  const { theme, toggle, accent, setAccent, font, setFont, layout, setLayout, oceanMode, toggleOcean } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const [search, setSearch] = useState("");
@@ -102,7 +103,12 @@ export default function Navbar({ setChatOpen }) {
   return (
     <nav className="navbar">
       <Link to="/" className="navbar-logo">
-        <span>VibeGit</span>
+        <span
+          className="navbar-logo-text"
+          style={{
+            backgroundImage: `linear-gradient(135deg, ${accent}, ${accent}bb)`,
+          }}
+        >VibeGit</span>
       </Link>
 
       <div className="navbar-search-container">
@@ -245,6 +251,7 @@ export default function Navbar({ setChatOpen }) {
           <Link to="/login" className="nav-create-btn">Sign in</Link>
         )}
         <PullSwitch inline />
+        <OceanTap active={oceanMode} onToggle={toggleOcean} />
       </div>
     </nav>
   );

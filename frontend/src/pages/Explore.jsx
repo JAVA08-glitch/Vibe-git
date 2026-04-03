@@ -224,7 +224,7 @@ function ProjectCardSmall({ project, onLike }) {
         </div>
       </div>
       
-      <div className="ex-proj-hover-cta">View Details →</div>
+      <div className="ex-proj-hover-cta" style={{ display: "none" }} />
     </div>
   );
 }

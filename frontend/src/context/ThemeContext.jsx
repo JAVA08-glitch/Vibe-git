@@ -13,6 +13,7 @@ export function ThemeProvider({ children }) {
   const [accent, setAccent] = useState(() => localStorage.getItem("accent") || "#a78bfa");
   const [font, setFont] = useState(() => localStorage.getItem("font") || "inter");
   const [layout, setLayout] = useState(() => localStorage.getItem("layout") || "grid");
+  const [oceanMode, setOceanMode] = useState(false);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -37,10 +38,16 @@ export function ThemeProvider({ children }) {
     localStorage.setItem("layout", layout);
   }, [layout]);
 
+  const toggleOcean = () => {
+    setOceanMode(o => !o);
+    // Set accent to ocean blue when activating
+    if (!oceanMode) setAccent("#38bdf8");
+  };
+
   const toggle = () => setTheme(t => t === "dark" ? "light" : "dark");
 
   return (
-    <ThemeContext.Provider value={{ theme, toggle, accent, setAccent, font, setFont, layout, setLayout }}>
+    <ThemeContext.Provider value={{ theme, toggle, accent, setAccent, font, setFont, layout, setLayout, oceanMode, toggleOcean }}>
       {children}
     </ThemeContext.Provider>
   );

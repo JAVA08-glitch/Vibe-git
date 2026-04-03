@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
-import { ThemeProvider } from "./context/ThemeContext";
+import { ThemeProvider, useTheme } from "./context/ThemeContext";
 import Navbar from "./components/Navbar";
 import ChatModal from "./components/ChatModal";
 import NightSky from "./components/NightSky";
+import OceanBackground from "./components/OceanBackground";
 import Explore from "./pages/Explore";
 import Feed from "./pages/Feed";
 import Create from "./pages/Create";
@@ -20,8 +21,14 @@ import ProjectIDE from "./pages/ProjectIDE";
 
 function NightSkyGlobal() {
   const location = useLocation();
+  const { oceanMode } = useTheme();
   if (location.pathname === "/login") return null;
-  return <NightSky />;
+  return (
+    <>
+      {!oceanMode && <NightSky />}
+      <OceanBackground active={oceanMode} />
+    </>
+  );
 }
 
 function AppInner() {
